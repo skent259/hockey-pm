@@ -2,3 +2,6 @@
 
 data/*.rds
 .Rproj.user
+
+*.RData
+*.Rhistory
