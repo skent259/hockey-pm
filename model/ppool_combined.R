@@ -46,9 +46,10 @@ save('pm_fit', file = here("model", 'ppool_combined.RData'))
 
 ## Analysis #################
 
+lambda_samp = rstan::extract(pm_fit, pars="lambda")[["lambda"]]
+
 
 #Rank teams by posterior means
-lambda_samp = rstan::extract(pm_fit, pars="lambda")[["lambda"]]
 alfa_samp = rstan::extract(pm_fit, pars="alfa")[["alfa"]]
 tpostmeans = colMeans(alfa_samp)
 tnames = data@Dimnames[[2]][2:32]
