@@ -170,25 +170,25 @@ check_model_data <- function(mat) {
   X_play <- mat[, 33:ncol(mat)]
   
   # Player rows should sum to 0
-  check <- sum(rowSums(X_play) != 0)
+  check <- sum(Matrix::rowSums(X_play) != 0)
   if (check != 0) {
     print("Some player rows are non-zero in sum")
   }
   
   # Player rows should have 12 non-zero entries
-  check <- sum(rowSums(abs(X_play)) != 12) 
+  check <- sum(Matrix::rowSums(abs(X_play)) != 12) 
   if (check != 0) {
     print("Some player rows don't have 12 non-zero entries")
   }
   
   # Team rows should sum to 0
-  check <- sum(rowSums(X_teams) != 0)
+  check <- sum(Matrix::rowSums(X_teams) != 0)
   if (check != 0) {
     print("Some team rows are non-zero in sum")
   }
   
   # Team rows should have 2 non-zero entries
-  check <- sum(rowSums(abs(X_teams)) != 2)
+  check <- sum(Matrix::rowSums(abs(X_teams)) != 2)
   if (check != 0) {
     print("Some team rows don't have 2 non-zero entries")
   }
