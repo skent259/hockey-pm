@@ -32,11 +32,11 @@ r=.5
 #since we are partially pooling. I think this is what the authors do in Section 4 of their paper,
 #their full posterior analysis.
 
-
+library(rstan)
 datalist <- list(ng=ng, y=y, nt=nt, np=np, XT=XT, XP=XP, nzt=nzt, nzp=nzp, sigmat=sigmat, s=s, r=r)
 
 
-pm_mod <- stan_model(file = here("modeling", "simple.stan"))
+pm_mod <- stan_model(file = here("model", "ppool_combined.stan"))
 pm_fit <- sampling(object = pm_mod, 
                    data = datalist)
 
