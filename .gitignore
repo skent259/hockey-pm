@@ -5,3 +5,7 @@ data/*.rds
 
 *.RData
 *.Rhistory
+*.DS_Store
+analysis/ex
+
+*.html
