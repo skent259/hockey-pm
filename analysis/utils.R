@@ -10,6 +10,18 @@ pull_seasons <- function(fname) {
   s[which(stringr::str_detect(s, "s'"))]
 }
 
+#' Pull model from file name 
+#' 
+#' @param fname The data file name 
+#' @return A string like "ppool_off-def" indicating model
+pull_modname <- function(fname) {
+  # Seasons start with 's' and contain '
+  s <- tools::file_path_sans_ext(basename(fname)) 
+  s <- stringr::str_split(s, "_")[[1]]
+  
+  paste0(s[1:2], collapse = "_")
+}
+
 #' Plot posterior intervals for parameters
 #'
 #' Compare to `bayesplot::mcmc_intervals()`, but uses a slightly different

@@ -4,7 +4,7 @@ library(rstan)
 library(Matrix)
 source(here("analysis/utils.R"))
 
-d_fname <- "model-data_s'21_off-def_2022-03-20.rds"
+d_fname <- "model-data_s'18'19'20'21_off-def_2022-03-20.rds"
 d <- readRDS(here("data", d_fname))
 
 ## Set up data list for Stan --------------------------------------------------#
@@ -62,7 +62,7 @@ saveRDS(pm_fit, here("model", model_fname))
 team_names <- colnames(d)[2:32]
 player_names <- colnames(d)[32 + 1:np]
 
-plot_post_parameter(pm_fit, )
+plot_post_parameter(pm_fit, vars(starts_with("alfa")), team_names) 
 
 plot_post_parameter(pm_fit, vars(starts_with("beta_off")), player_names) +
   theme(axis.text.y = element_blank()) 

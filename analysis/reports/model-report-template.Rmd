@@ -47,14 +47,21 @@ if (!exists("params")) {
 ```{r}
 
 ## Pull in model --------------------------------------------------------------#
+ext <- tools::file_ext(params[["model_fname"]])
+if (ext == "RData") {
+  load(file = here(params[["model_fname"]])) # `pm_fit`  
+} else if (ext == "rds") {
+  pm_fit <- readRDS(here(params[["model_fname"]]))
+}
 
-load(file = here(params[["model_fname"]])) # `pm_fit`
 
 # fname <- "model-data_s'18'19'20'21_combined_2022-03-10.rds"
 model_data <- readRDS(here(params[["data_fname"]]))
 
 team_names <- colnames(model_data)[2:32]
 player_names <- colnames(model_data)[33:ncol(model_data)]
+
+model <- pull_modname(params[["model_fname"]])
 ```
 
 ## Model info
@@ -103,12 +110,17 @@ bayesplot::mcmc_hist(pm_fit, pars = "lambda") +
 mcmc_trace(pm_fit, pars = "lambda") +
   labs(x = "Iteration", title = "MCMC chain plot for Lambda")
 
+if (model == "ppool_off-def") {
+  par_list <- c("lambda", "alfa", "beta_off", "beta_def")
+} else {
+  par_list <- c("lambda", "alfa", "beta")
+}
 
-plot_rhat_multi(pm_fit, par_list = c("lambda", "alfa", "beta")) +
+plot_rhat_multi(pm_fit, par_list) +
   patchwork::plot_annotation(title = "Rhat plot")
 
 
-plot_neff_multi(pm_fit, par_list = c("lambda", "alfa", "beta")) +
+plot_neff_multi(pm_fit, par_list) +
   patchwork::plot_annotation(title = "Effective sample size plot")
 ```
 
@@ -118,6 +130,11 @@ plot_neff_multi(pm_fit, par_list = c("lambda", "alfa", "beta")) +
 ```{r}
 mcmc_acf(pm_fit, pars = "lambda", lags = 100)
 mcmc_acf(pm_fit, pars = "alfa[1]", lags = 100)
-mcmc_acf(pm_fit, pars = "beta[1]", lags = 100)
+switch(
+  model, 
+  "ppool_combined" = mcmc_acf(pm_fit, pars = "beta[1]", lags = 100),
+  "ppool_off-def" = mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
+)
+
 ```
 

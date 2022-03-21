@@ -10,8 +10,8 @@ library(here)
 source(here("analysis/utils.R"))
 
 ## Change these parameters ----------------------------------------------------#
-model_fname <- "ppool_combined.RData"
-data_fname <- "model-data_s'18'19'20'21_combined_2022-03-10.rds"
+model_fname <- "ppool_off-def_s'18'19'20'21_2022-03-20.rds"
+data_fname <- "model-data_s'18'19'20'21_off-def_2022-03-20.rds"
 out_dir <- "analysis/reports"
 
 ## Build report ---------------------------------------------------------------#
@@ -26,7 +26,7 @@ params <- list(
 )
 
 make_report_fname <- function(model_fname, data_fname) {
-  model <- tools::file_path_sans_ext(basename(model_fname))
+  model <- pull_modname(model_fname)
   seasons <- pull_seasons(data_fname)
   glue::glue("model-report_{model}_{seasons}_{lubridate::today()}.html")  
 }
