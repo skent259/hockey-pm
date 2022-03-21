@@ -7,7 +7,7 @@
 ##-----------------------------------------------------------------------------#
 
 library(here)
-library(magrittr)
+source(here("analysis/utils.R"))
 
 ## Change these parameters ----------------------------------------------------#
 model_fname <- "ppool_combined.RData"
@@ -27,8 +27,7 @@ params <- list(
 
 make_report_fname <- function(model_fname, data_fname) {
   model <- tools::file_path_sans_ext(basename(model_fname))
-  seasons <- tools::file_path_sans_ext(basename(data_fname)) %>% 
-    stringr::str_split("_", simplify = TRUE) %>% .[[1, 2]]
+  seasons <- pull_seasons(data_fname)
   glue::glue("model-report_{model}_{seasons}_{lubridate::today()}.html")  
 }
 rep_fname <- make_report_fname(model_fname, data_fname)

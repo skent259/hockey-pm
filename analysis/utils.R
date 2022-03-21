@@ -1,3 +1,14 @@
+#' Pull Seasons from file name 
+#' 
+#' @param fname The data file name 
+#' @return A string like "s'19'20'21" indicating seasons
+pull_seasons <- function(fname) {
+  # Seasons start with 's' and contain '
+  s <- tools::file_path_sans_ext(basename(fname)) 
+  s <- stringr::str_split(s, "_")[[1]]
+     
+  s[which(stringr::str_detect(s, "s'"))]
+}
 
 #' Plot posterior intervals for parameters
 #'
@@ -25,15 +36,15 @@ plot_post_parameter <- function(fit, pars, names, ..., top = NULL) {
   
   if (!is.null(top)) {
     if (top > 0) {
-      plot_data <- plot_data %>% slice_max(order_by = m, n = top)  
+      plot_data <- slice_max(plot_data, order_by = m, n = top)  
     } else if (top < 0) {
-      plot_data <- plot_data %>% slice_min(order_by = m, n = abs(top))
+      plot_data <- slice_min(plot_data, order_by = m, n = abs(top))
     }
   }
-  order <- plot_data %>% dplyr::arrange(m)
+  order <-  dplyr::arrange(plot_data, m)
   
-  plot_data %>% 
-    ggplot2::ggplot(ggplot2::aes(y = parameter, yend = parameter)) +
+  ggplot2::ggplot(plot_data,
+                  ggplot2::aes(y = parameter, yend = parameter)) +
     # Plot the interval as three separate geoms: segment, segment, and errorbar
     ggplot2::geom_segment(
       ggplot2::aes(x = ll, xend = hh),
