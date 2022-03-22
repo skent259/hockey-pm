@@ -4,22 +4,42 @@ library(tidyverse)
 #' Not in operator
 `%ni%` <- Negate(`%in%`)
 
+#' Get all unique values across the specified columns
+#'
+#' @param df A data-frame
+#' @param .cols A vector of columns, or a vector of tidy-select values like
+#'   `starts_with()`.
+#'   
+#' @return A vector of unique values
+unique_across <- function(df, .cols) {
+  df %>% 
+    summarize(
+      across(all_of(.cols), ~list(unique(.x)))
+    ) %>% 
+    unlist() %>% 
+    unique()
+}
+
 #' Get all players from a data frame
 #' 
 #' @param df A data-frame with structure based on `hockeyR::load_pbp()`.
 #' 
 #' @return A vector of player names contained in `df`. 
 get_all_players <- function(df) {
-  
-  x <- df %>% summarize(
-    across(c(starts_with("home_on_"), 
-             starts_with("away_on_"), 
-             ends_with("_goalie")),
-           ~list(unique(.x)))
-  ) %>% 
-    unlist() %>% 
-    unique()
-  
+  x <- df %>% unique_across(c(starts_with("home_on_"), 
+                              starts_with("away_on_"), 
+                              ends_with("_goalie")))
+  x[!is.na(x)]
+}
+
+#' Get non-goalie players from a data frame 
+#' 
+#' @inheritParams get_all_players
+#' 
+#' @return A vector of player names contained in `df`. 
+get_nongoalie_players <- function(df) {
+  x <- df %>% unique_across(c(starts_with("home_on_"), 
+                              starts_with("away_on_")))
   x[!is.na(x)]
 }
 
@@ -29,11 +49,7 @@ get_all_players <- function(df) {
 #' 
 #' @return A vector of team abbreviations contained in `df`. 
 get_all_teams <- function(df) {
-  df %>% 
-    summarize(across(c(home_abbreviation, away_abbreviation),
-                     ~list(unique(.x)))) %>% 
-    unlist() %>% 
-    unique()
+  unique_across(df, c("home_abbreviation", "away_abbreviation"))
 }
 
 #' Build model data
@@ -48,12 +64,13 @@ get_all_teams <- function(df) {
 #'
 #' @param season The season(s) of interest, as passed to `hockeyR::load_pbp()`.
 #' @param method How to construct the data, with options `"combined"` for a
-#'   marginal plus-minus statistic, or `"off-def"` for separate offensive and
-#'   defensive estimates.  
+#'   marginal plus-minus statistic, `"off-def"` for separate offensive and
+#'   defensive estimates, and `'off-def-ng"` for separate estimates but no
+#'   goalie estimates. 
 #'
 #' @return A sparse matrix for modeling
-build_model_data <- function(season, method = c("combined", "off-def")) {
-  method <- match.arg(method, c("combined", "off-def"))
+build_model_data <- function(season, method = c("combined", "off-def", "off-def-ng")) {
+  method <- match.arg(method, c("combined", "off-def", "off-def-ng"))
   
   goals <- hockeyR::load_pbp(season) %>% 
     filter(event_type == "GOAL")
@@ -83,14 +100,20 @@ build_model_data <- function(season, method = c("combined", "off-def")) {
     )  
   
   # Convert to data-frame for filling sparse matrix
-  sparse_df_from_row <- function(row) {
+  sparse_df_from_row <- function(row, method) {
     # For each goal, specify the row, column, and value to fill the sparse
     # matrix according to the style of Gramacy et al. 2013.  
     # Columns will be "y", the teams involved, and the players involved. 
     
     i <- row$i
-    home_cols <- c(paste0("home_on_", 1:5), "home_goalie")
-    away_cols <- c(paste0("away_on_", 1:5), "away_goalie")
+    if (method == "off-def-ng") {
+      home_cols <- c(paste0("home_on_", 1:5))
+      away_cols <- c(paste0("away_on_", 1:5))
+    } else {
+      home_cols <- c(paste0("home_on_", 1:5), "home_goalie")
+      away_cols <- c(paste0("away_on_", 1:5), "away_goalie")
+    }
+    n_p <- length(home_cols)
     
     cols <- unlist(c(
       "y", # y
@@ -103,36 +126,46 @@ build_model_data <- function(season, method = c("combined", "off-def")) {
     values <- c(
       ifelse(row$event_team_type == "home", 1, -1), # y
       1, -1, # teams 
-      rep(1, 6), rep(-1, 6) # players
+      rep(1, n_p), rep(-1, n_p) # players
     )
     
     # home team is on offense if values[1] == 1, defense otherwise 
     def <- c(
       rep(NA, 3), # y, teams
-      rep(values[1] == -1, 6), rep(values[1] == 1, 6) # players
+      rep(values[1] == -1, n_p), rep(values[1] == 1, n_p) # players
     )
     
-    return(tibble(rows, cols, values, def))
+    return(tibble::tibble(rows, cols, values, def))
   }
   
   sparse_df_spec <- goals %>% 
     mutate(i = row_number()) %>% 
     transpose() %>% 
-    map(sparse_df_from_row) %>% 
+    map(~sparse_df_from_row(.x, method)) %>% 
     bind_rows()
   
-  players <- get_all_players(goals)
+  players <- switch(
+    method,
+    "off-def-ng" = get_nongoalie_players(goals),
+    get_all_players(goals) # default 
+  )
   col_names <- c("y", get_all_teams(goals), players)
   
   sparse_df_spec <- sparse_df_spec %>% 
     mutate(col_ind = match(cols, col_names)) 
   
-  if (method == "off-def") {
+  if (method %in% c("off-def", "off-def-ng")) {
     # Need to push the column_index for defensive players to a separate set
     sparse_df_spec <- sparse_df_spec %>% 
       mutate(across(col_ind, ~if_else(def, .x + length(players), .x, missing = .x)))
     
     col_names <- c(col_names, players)
+  }
+  
+  missing_col <- max(sparse_df_spec$col_ind) < length(col_names)
+  if (missing_col) {
+    sparse_df_spec <- sparse_df_spec %>% 
+      tibble::add_row(rows = 1, values = 0, col_ind = length(col_names))
   }
   
   mat <- Matrix::sparseMatrix(
@@ -141,10 +174,9 @@ build_model_data <- function(season, method = c("combined", "off-def")) {
     x = sparse_df_spec$values
   )
   
-  colnames(mat) <- col_names  
+  colnames(mat) <- col_names
   
   return(mat)
-    
 }
 
 
@@ -162,10 +194,11 @@ build_model_data <- function(season, method = c("combined", "off-def")) {
 #' for now.  
 #' 
 #' @param mat A matrix output from `build_model_data()`.
+#' @inheritParams build_model_data
 #' 
 #' @return Nothing
-check_model_data <- function(mat) {
-  y <- mat[, 1]
+check_model_data <- function(mat, method = c("combined", "off-def", "off-def-ng")) {
+  method <- match.arg(method, c("combined", "off-def", "off-def-ng"))
   X_teams <- mat[, 2:32]
   X_play <- mat[, 33:ncol(mat)]
   
@@ -176,7 +209,8 @@ check_model_data <- function(mat) {
   }
   
   # Player rows should have 12 non-zero entries
-  check <- sum(Matrix::rowSums(abs(X_play)) != 12) 
+  n_nonzero <- switch(method, "off-def-ng" = 10, 12)
+  check <- sum(Matrix::rowSums(abs(X_play)) != n_nonzero) 
   if (check != 0) {
     print("Some player rows don't have 12 non-zero entries")
   }
@@ -194,9 +228,3 @@ check_model_data <- function(mat) {
   }
   
 }
-
-
-
-
-
-

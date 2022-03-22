@@ -13,7 +13,7 @@ method <- "off-def"
 
 out <- build_model_data(seasons, method)
 
-check_model_data(out)
+check_model_data(out, method)
 
 
 ## Save data to .rds ----------------------------------------------------------#
