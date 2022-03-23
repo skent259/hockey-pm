@@ -1,0 +1,150 @@
+---
+title: "Explanation of Modeling Data Setup "
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+<style>
+body{
+    font-size: 14pt;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(here)
+library(glue)
+library(tidyverse)
+library(Matrix)
+
+source(here("data", "utils.R"))
+
+data_dir <- "data"
+
+```
+
+
+It's worth going through an example of what the data means and how this affects the interpretation of the parameters estimated in the model.  Below we discuss the several data options and their differences.
+
+We use an example game between the Chicago Blackhawks and the Nashville Predators on Jan. 26, 2021.  While the final score was 3-2 (in favor of Nashville), there were 3 "regular" goals that get included in this data.  The other 2 goals happened on the power play and in overtime.  Regular goals were scored by Yakov Trenin, Mattias Janmark, and Mikael Granlund.  
+
+- View the game summary here: https://www.espn.com/nhl/game/_/gameId/401272191
+- View the box score, with +/- stats here: https://www.espn.com/nhl/boxscore/_/gameId/401272191
+
+
+## Combined
+
+```{r}
+## Pull in data ---------------------------------------------------------------#
+seasons <- c("2021")
+method <- "combined"
+
+d1 <- build_model_data(seasons, method)
+```
+
+
+
+```{r, fig.height=4, fig.width=8}
+
+
+plot_example_dataframe <- function(d) {
+  # which(out[, "CHI"] != 0)
+  # out[301, 2:32]
+  chi_nsh <- d[301:303, ]
+  
+  chi_nsh <- chi_nsh[, which(colSums(chi_nsh) != 0)] %>% 
+    as.matrix() %>% 
+    as_tibble() %>% 
+    arrange(desc(y))
+
+  plot_data <- 
+    chi_nsh %>% 
+    rownames_to_column() %>% 
+    pivot_longer(-rowname) %>% 
+    mutate(
+      type = case_when(
+        str_detect(name, "off_") ~ "off",
+        str_detect(name, "def_") ~ "def",
+        name == "y" ~ "y",
+        str_length(name) == 3 ~ "team",
+        TRUE ~ "remaining"
+      ),
+      type = fct_relevel(type, rev),
+      name = fct_reorder2(name, rowname, value)
+    )
+  
+  plot_data %>% 
+    ggplot(aes(name, rowname)) + 
+    geom_tile(fill = "white", color = "grey50") + 
+    geom_text(aes(label = value, color = as.character(value))) +
+    scale_x_discrete(position = "top") +
+    scale_color_manual(
+      name = "Team", 
+      limits = c("-1", "1"),
+      labels = c("CHI", "NSH"),
+      values = c("#CE1126", "#FFB81C")
+    ) +
+    facet_grid(~type, scales = "free", space = "free") + 
+    theme_void() +
+    theme(
+      legend.position = "bottom", 
+      axis.text.x = element_text(angle = 90, hjust = 0),
+      strip.text.x = element_blank()
+    )
+}
+
+
+plot_example_dataframe(d1)
+
+```
+
+This data follows exactly as described in the paper of Gramacy, Taddy, and Jensen (2013) to estimate the partial plus-minus effects of each player.  
+
+- Each row corresponds to a goal $i$.  We exclude power-play, shorthanded, and overtime goals.
+- The outcome $y_i = 1$ for goals scored by the home team, $y_i = -1$ for goals scored by the away team
+- Team columns equal 1 for the home team and -1 for the away team, with all other teams (not shown) set to 0.
+- Player columns equal 1 for the home player and -1 for the away player if they were on the ice.  Players not on the ice (and those from other teams) are all set to 0.  
+
+With this setup, a logistic type model predicts the probability or odds that the home team scores a goal given that a goal was scored.  A positive player effect coefficient indicates that the odds *their* team scores given a goal was scored while they were on the ice.  
+
+## Offensive and Defensive Separately
+
+```{r}
+## Pull in data ---------------------------------------------------------------#
+seasons <- c("2021")
+method <- "off-def"
+
+d2 <- build_model_data(seasons, method)
+
+n_p <- (ncol(d2) - 32) / 2
+colnames(d2)[32 + 1:n_p] <- glue("off_{colnames(d2)[32 + 1:n_p]}")
+colnames(d2)[32 + n_p + 1:n_p] <- glue("def_{colnames(d2)[32 + n_p + 1:n_p]}")
+
+
+```
+
+
+```{r, fig.height=4, fig.width=8}
+plot_example_dataframe(d2)
+```
+
+We can also consider effects that separate out the offensive and defensive contribution of each player.  We use a similar framework as above, except now each player has two columns in the design matrix:
+
+- The offensive player column equals 1 for a home team when their team scores and -1 for the away team when their team scores.  
+- The defensive player column equals 1 for a home team when the opposing team scores and -1 for the away team when the opposing team scores.  
+
+In this way, players contribute to their offensive coefficient only when they score and contribute only to their defensive coefficient when the other team scores, given that a goal was scored. 
+
+*** 
+
+## References 
+
+[1]R. B. Gramacy, M. A. Taddy, and S. T. Jensen, “Estimating Player Contribution in Hockey with Regularized Logistic Regression,” arXiv:1209.5026 [stat], Jan. 2013, Accessed: Jan. 14, 2022. [Online]. Available: http://arxiv.org/abs/1209.5026
+
