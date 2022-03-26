@@ -110,11 +110,12 @@ bayesplot::mcmc_hist(pm_fit, pars = "lambda") +
 mcmc_trace(pm_fit, pars = "lambda") +
   labs(x = "Iteration", title = "MCMC chain plot for Lambda")
 
-if (model == "ppool_off-def") {
-  par_list <- c("lambda", "alfa", "beta_off", "beta_def")
-} else {
-  par_list <- c("lambda", "alfa", "beta")
-}
+par_list <- switch(
+  model,
+  "ppool_combined" = c("lambda", "alfa", "beta"),
+  "ppool_off-def" = c("lambda", "alfa", "beta_off", "beta_def"),
+  "ppool_off-def-ng" = c("lambda", "alfa", "beta_off", "beta_def")
+)
 
 plot_rhat_multi(pm_fit, par_list) +
   patchwork::plot_annotation(title = "Rhat plot")
@@ -133,7 +134,8 @@ mcmc_acf(pm_fit, pars = "alfa[1]", lags = 100)
 switch(
   model, 
   "ppool_combined" = mcmc_acf(pm_fit, pars = "beta[1]", lags = 100),
-  "ppool_off-def" = mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
+  "ppool_off-def" = mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100),
+  "ppool_off-def-ng" = mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
 )
 
 ```
