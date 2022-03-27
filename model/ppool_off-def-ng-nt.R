@@ -65,5 +65,5 @@ plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names) +
 
 ## Diagnostics ----------------------------------------------------------------#
 
-plot_rhat_multi(pm_fit, par_list = c("lambda", "alfa", "beta_off", "beta_def")) +
+plot_rhat_multi(pm_fit, par_list = c("lambda", "beta_off", "beta_def")) +
   patchwork::plot_annotation(title = "Rhat plot")

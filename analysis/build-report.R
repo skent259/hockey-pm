@@ -1,17 +1,17 @@
 ##-----------------------------------------------------------------------------#
 #' Build report file 
 #' 
-#' Run this R script to build the report "model-report-template.Rmd" based on '
+#' Run this R script to build the report "model-report-template.Rmd" based on
 #specified parameters.  This is preferable because it will make sure to append
-#the ' date that it was run
+#the date that it was run
 ##-----------------------------------------------------------------------------#
 
 library(here)
 source(here("analysis/utils.R"))
 
 ## Change these parameters ----------------------------------------------------#
-model_fname <- "ppool_off-def_s'18'19'20'21_2022-03-20.rds"
-data_fname <- "model-data_s'18'19'20'21_off-def_2022-03-20.rds"
+model_fname <- "ppool_off-def-ng-nt_s'18'19'20'21_2022-03-26.rds"
+data_fname <- "model-data_s'18'19'20'21_off-def-ng_2022-03-23.rds"
 out_dir <- "analysis/reports"
 
 ## Build report ---------------------------------------------------------------#

@@ -1,11 +1,13 @@
 .Rproj.user/*
 
-data/*.rds
+
 .Rproj.user
 
-*.RData
+
 *.Rhistory
 *.DS_Store
 analysis/ex
 
 *.html
+
+notes.rtf

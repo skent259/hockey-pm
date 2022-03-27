@@ -9,7 +9,7 @@ data_dir <- "data"
 
 ## Pull in data ---------------------------------------------------------------#
 seasons <- c("2018", "2019", "2020", "2021")
-method <- "off-def-ng"
+method <- "combined"
 
 out <- build_model_data(seasons, method)
 

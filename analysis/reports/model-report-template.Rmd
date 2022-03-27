@@ -41,6 +41,8 @@ if (!exists("params")) {
   )
 }
 
+
+
 ```
 
 
@@ -55,7 +57,7 @@ if (ext == "RData") {
 }
 
 
-# fname <- "model-data_s'18'19'20'21_combined_2022-03-10.rds"
+#params$data_fname <- "data/model-data_s'18'19'20'21_combined_2022-03-24.rds"
 model_data <- readRDS(here(params[["data_fname"]]))
 
 team_names <- colnames(model_data)[2:32]
@@ -69,9 +71,15 @@ model <- pull_modname(params[["model_fname"]])
 - Data: "`r basename(params[["data_fname"]])`"
 - Model: "`r basename(params[["model_fname"]])`"
 
+```{r}
+teams_included = !grepl("nt",model)
+off_def = grepl("off-def",model)
+```
+
+
 ## Parameter Estimates 
 
-```{r}
+```{r, eval = teams_included}
 # All teams 
 plot_post_parameter(pm_fit, vars(starts_with("alfa")), team_names) +
   labs(title = "Team Effects")
@@ -79,19 +87,65 @@ plot_post_parameter(pm_fit, vars(starts_with("alfa")), team_names) +
 ```
 
 
-```{r}
+```{r, eval = off_def}
+
+###### Offensive Effects ##########
+# All players.  Note the updated aesthetic allows this to be readable, even if
+# we can't pull out individual players
+np = length(player_names)/2
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), player_names[1:np]) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Offensive Player Effects")
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), player_names[1:np], top = top_n) +
+  labs(title = glue("Top {top_n} Offensive Player Effects"))
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), player_names[1:np], top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Offensive Player Effects"))
+
+
+######### Defensive Effects ################
+# All players.  Note the updated aesthetic allows this to be readable, even if
+# we can't pull out individual players
+np = length(player_names)/2
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names[1:np]) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Defensive Player Effects")
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names[1:np], top = top_n) +
+  labs(title = glue("Top {top_n} Defensive Player Effects"))
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names[1:np], top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Defensive Player Effects"))
+
+
+
+
+```
+
+
+
+
+```{r, eval = !off_def}
+######## Overall effects ############
+
 # All players.  Note the updated aesthetic allows this to be readable, even if
 # we can't pull out individual players
 plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names) +
   theme(axis.text.y = element_blank()) +
-  labs(title = "Player Effects")
+  labs(title = "Overall Player Effects")
 
 # top 30 players; bottom 30 players 
-n_p <- 30
-plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names, top = n_p) +
-  labs(title = glue("Top {n_p} Player Effects"))
-plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names, top = -n_p) +
-  labs(title = glue("Bottom {n_p} Player Effects"))
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names, top = top_n) +
+  labs(title = glue("Top {top_n} Player Effects"))
+plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names, top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Player Effects"))
 ```
 
 
@@ -110,12 +164,14 @@ bayesplot::mcmc_hist(pm_fit, pars = "lambda") +
 mcmc_trace(pm_fit, pars = "lambda") +
   labs(x = "Iteration", title = "MCMC chain plot for Lambda")
 
-if (model == "ppool_off-def") {
+if (teams_included & off_def) {
   par_list <- c("lambda", "alfa", "beta_off", "beta_def")
+} else if (off_def) {
+  par_list <- c("lambda", "beta_off", "beta_def")
 } else {
   par_list <- c("lambda", "alfa", "beta")
 }
-
+  
 plot_rhat_multi(pm_fit, par_list) +
   patchwork::plot_annotation(title = "Rhat plot")
 
@@ -129,12 +185,19 @@ plot_neff_multi(pm_fit, par_list) +
 
 ```{r}
 mcmc_acf(pm_fit, pars = "lambda", lags = 100)
-mcmc_acf(pm_fit, pars = "alfa[1]", lags = 100)
-switch(
-  model, 
-  "ppool_combined" = mcmc_acf(pm_fit, pars = "beta[1]", lags = 100),
-  "ppool_off-def" = mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
-)
+
+if (teams_included && off_def) {
+  mcmc_acf(pm_fit, pars = "alfa[1]", lags = 100)
+  mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
+  mcmc_acf(pm_fit, pars = "beta_def[1]", lags = 100)
+} else if (off_def) {
+  mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
+  mcmc_acf(pm_fit, pars = "beta_def[1]", lags = 100)
+} else {
+  mcmc_acf(pm_fit, pars = "alfa[1]", lags = 100)
+  mcmc_acf(pm_fit, pars = "beta[1]", lags = 100)
+}
+
 
 ```
 
