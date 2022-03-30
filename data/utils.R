@@ -179,7 +179,6 @@ build_model_data <- function(season, method = c("combined", "off-def", "off-def-
   return(mat)
 }
 
-
 #' Run tests on model data
 #'
 #' Checks the model data output for a few conditions, including:
@@ -227,4 +226,103 @@ check_model_data <- function(mat, method = c("combined", "off-def", "off-def-ng"
     print("Some team rows don't have 2 non-zero entries")
   }
   
+}
+
+
+#' Count events in between changes
+#' @param df A data frame of play-by-play hockey information, from
+#'   `hockeyR::load_pbp()`.
+#' @param event The event type to count.
+#' @return A vector of counts, with length equal to the number of changes.
+count_events <- function(df, event = "GOAL", team = "home") {
+  ev <- df$event_type  
+  ev_team <- df$event_team_type
+  changes <- which(df$event_type == "CHANGE")
+  counts <- numeric(length(changes))
+  cnt <- 0
+  j <- 1 
+  for (i in 1:nrow(df)) {
+    if (ev[i] == "CHANGE") {
+      counts[j-1] <- cnt
+      cnt <- 0
+      j <- j + 1
+    } else if (ev[i] == event & ev_team[i] == team) {
+      cnt <- cnt + 1
+    }
+  }
+  return(counts)
+}
+
+#' Build shots-on-goal data
+#'
+#' This function creates a data frame where each row represents a 'shift' in
+#' hockey. For each shift, information is computed about the number of goals,
+#' shots, missed shots, and blocked shots for both the home and away team.
+#' Additional columns provide information on which players were on the ice for
+#' that shift for both the home and away teams, and the team that they belong
+#' to.
+#'
+#' Shifts are excluded if they take up no time (e.g. at the start of a game, or
+#' between periods) of if they do not occur during a regular time, 5v5 scenario.
+#' This excludes power plays, 4v4, empty net, and all overtime shifts.
+#' Play-by-play data is pulled using `hockeyR::load_pbp()`.
+#'
+#' @param season The season(s) of interest, as passed to `hockeyR::load_pbp()`.
+#' @return A data frame with event counts and shift length for all changes
+build_sog_data <- function(season) {
+  pbp <- hockeyR::load_pbp(season) 
+  
+  changes <- which(pbp$event_type == "CHANGE")
+  
+  change_df <- pbp[changes, ] %>% 
+    dplyr::select(
+      event_team_type, 
+      starts_with("home_on_"), 
+      starts_with("away_on_"), 
+      home_goalie,
+      away_goalie, 
+      home_abbreviation, 
+      away_abbreviation,
+      strength_state,
+      strength_code, 
+      period
+    )
+  
+  chng_times <- pbp$game_seconds[changes]
+  change_df$shift_time <- dplyr::lead(chng_times) - chng_times
+  
+  change_df$n_goal_home <- count_events(pbp, "GOAL", "home")
+  change_df$n_goal_away <- count_events(pbp, "GOAL", "away")
+  change_df$n_shot_home <- count_events(pbp, "SHOT", "home")
+  change_df$n_shot_away <- count_events(pbp, "SHOT", "away")
+  change_df$n_missshot_home <- count_events(pbp, "MISSED_SHOT", "home")
+  change_df$n_missshot_away <- count_events(pbp, "MISSED_SHOT", "away")
+  change_df$n_blkdshot_home <- count_events(pbp, "BLOCKED_SHOT", "home")
+  change_df$n_blkdshot_away <- count_events(pbp, "BLOCKED_SHOT", "away")
+  
+  # Exclusions
+  # remove double changes, end of game, beginning of game 
+  change_df <- dplyr::filter(change_df, shift_time > 0)
+  # remove any shift that wasn't 5v5 in regular time 
+  change_df <- change_df %>% 
+    dplyr::filter(
+      strength_state == "5v5", 
+      strength_code %ni% c("PP", "SH"),
+      !is.na(away_goalie), 
+      !is.na(home_goalie), 
+      period <= 3
+    )
+  
+  change_df <- change_df %>% 
+    dplyr::select(
+      shift_time, 
+      starts_with("n_"), 
+      everything(),
+      -strength_state, 
+      -strength_code, 
+      -period,
+      -event_team_type
+    )
+  
+  return(change_df)
 }
