@@ -1,0 +1,327 @@
+---
+title: "Exploring Shots Data"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+<style>
+body{
+    font-size: 14pt;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(here)
+library(glue)
+library(tidyverse)
+library(Matrix)
+library(hockeyR)
+
+
+```
+
+
+# Intro 
+
+Terminology:
+
+* "Shots on goal" = A shot that directs the puck towards the net and either goes into the net for a goal or is stopped by the goaltender for a save. In our data set, `n_sog` = `n_goal`+`n_shot`
+
+* "Shot Attempts" = All shots, including shots on goal, missed shots and blocked shots. In our data set, `n_sa` =`n_goal`+`n_shot`+`n_missshot`+`n_blkdshot`. (See https://www.nhl.com/blackhawks/news/introducing-shot-attempts-sat/c-755520, this metric is tracked by the NHL)
+
+
+Here are a few example rows: 
+```{r}
+data_fname = "data/sog-data_s'18'19'20'21_2022-04-01.rds"
+shifts <- readRDS(here(data_fname))
+shifts <- as.tibble(shifts) %>%
+  mutate(n_sog_home=n_shot_home+n_goal_home, n_sog_away= n_shot_away+n_goal_away, n_sog=n_sog_home+n_sog_away) %>%
+  mutate(n_sa_home = n_sog_home + n_blkdshot_home + n_missshot_home, n_sa_away = n_sog_away + n_blkdshot_away + n_missshot_away, n_sa=n_sa_away+n_sa_home)
+
+shifts %>% select(shift_time, n_sog_home, n_sog_away, n_sog, n_sa_home, n_sa_away, n_sa)
+
+```
+
+
+The basic distribution of shift duration is as follows:
+```{r}
+ggplot(shifts) +
+  geom_histogram(aes(x=shift_time), color="black", fill="lightblue", binwidth = 5, boundary=0) +
+  scale_x_continuous(breaks = seq(0, 150, by = 10)) +
+  theme_bw() +
+  labs(x = "Shift Duration (s)")
+  
+```
+
+Note that while they don't show up in this histogram, there are still a decent number of shifts that lasted for longer than a minute:
+
+```{r, echo=TRUE}
+sum(shifts$shift_time>60)
+```
+
+
+# Analysis of Shots on Goal
+
+The vast majority of shifts had 0 shots on goal:
+```{r}
+shifts %>%
+  ggplot(aes(x=n_sog)) +
+  geom_bar(fill= "lightblue", color="black") +
+  theme_bw() +
+  labs(x="Number of shots on Goal")
+
+```
+Sort of a geometric distribution or perhaps extremely zero-inflated Poisson?
+
+We're interested in the relationship between shift duration and number of shots on goals:
+```{r}
+
+shifts %>%
+  ggplot(aes(x=shift_time, y=n_sog)) +
+  geom_point(position = position_jitter(height=.2), alpha=.2) +
+  scale_x_continuous(breaks = seq(0, 150, by = 15)) +
+  theme_bw() +
+  labs(x="Shift duration", y="Shots on goal")
+
+```
+```{r, echo=TRUE}
+cor(shifts$shift_time, shifts$n_sog)
+```
+
+The maximum number of shots on goal in any shift was 7. While there is some positive correlation, there were many short shifts (<10 s) with several shots on goal and there were also many long shifts with no shots on goal. 
+
+
+We were also interested in the relationship between the number of shots on goals by the two different teams on the ice:
+```{r}
+sog_counts <- as.data.frame(table(shifts$n_sog_home, shifts$n_sog_away)) %>%
+  rename(n_sog_home = Var1, n_sog_away=Var2) %>%
+  filter(Freq>0) %>%
+  mutate(Freq = log(Freq))
+
+
+ggplot(sog_counts, aes(n_sog_home, n_sog_away)) +
+  geom_tile(aes(fill = Freq), colour = "black") +
+  scale_fill_gradient(low = "white", high = "steelblue", name="Log of count") +
+  geom_text(aes(label = round(exp(Freq)))) +
+  labs(x="Home team's number of shots on goal", y= "Away team's number of shots on goal") +
+  theme_minimal()
+
+```
+The counts are uncorrelated.
+
+
+One thing we might do is divide shots on goals by shift duration to obtain a rate of shots on goal.
+Here, we plot rate of shots on goal versus shift duration
+```{r}
+
+shifts <- shifts %>%
+  mutate(rate_sog_home = n_sog_home/shift_time, rate_sog_away = n_sog_away/shift_time,
+         rate_sog = rate_sog_home+rate_sog_away)
+
+
+ggplot(shifts, aes(x=shift_time, y=rate_sog)) +
+  geom_point(alpha=.3) + 
+  theme_bw() +
+  labs(x="Shift duration", y="Rate of shots on goal")
+
+
+
+```
+There's some negative correlation: shorter shifts have higher rates. The distinct curves are due to the discreteness of the shots on goal counts.  
+
+
+# Analysis of Shot Attempts
+
+The vast majority of shifts had 0 shot attempts:
+```{r}
+shifts %>%
+  ggplot(aes(x=n_sa)) +
+  geom_bar(fill= "lightblue", color="black") +
+  theme_bw() +
+  labs(x="Number of shots attempts")
+
+```
+Relationship between shift duration and number of shots on goals:
+```{r}
+shifts %>%
+  ggplot(aes(x=shift_time, y=n_sa)) +
+  geom_point(position = position_jitter(height=.2), alpha=.2) +
+  scale_x_continuous(breaks = seq(0, 150, by = 15)) +
+  theme_bw() +
+  labs(x="Shift duration", y="Number of shot attempts")
+
+```
+```{r, echo=TRUE}
+cor(shifts$shift_time, shifts$n_sa)
+```
+More positively correlated than shots on goal with shift duration. Still, plenty of long shifts with no shot attempts. 
+
+Home versus away team shot attempts still largely uncorrelated:
+```{r}
+sog_counts <- as.data.frame(table(shifts$n_sa_home, shifts$n_sa_away)) %>%
+  rename(n_sa_home = Var1, n_sa_away=Var2) %>%
+  filter(Freq>0) %>%
+  mutate(Freq =log(Freq))
+
+
+ggplot(sog_counts, aes(n_sa_home, n_sa_away)) +
+  geom_tile(aes(fill = Freq), colour = "black") +
+  scale_fill_gradient(low = "white", high = "steelblue", name="Log of count") +
+  geom_text(aes(label = exp(Freq)), size=3) +
+  labs(x="Home team's number of shots attempts", y= "Away team's number of shot attempts") +
+  theme_minimal()
+
+```
+
+Finally, we can divide by shift time and look at rates:
+```{r}
+
+shifts <- shifts %>%
+  mutate(rate_sa_home = n_sa_home/shift_time, rate_sa_away = n_sa_away/shift_time,
+         rate_sa = rate_sa_home+rate_sa_away)
+
+
+ggplot(shifts, aes(x=shift_time, y=rate_sa)) +
+  geom_point(alpha=.3) + 
+  theme_bw() +
+  labs(x="Shift duration", y="Rate of shot attempts")
+
+
+```
+As we now expect from having seen the same plot for SOG, shorter shifts also have higher rates of shot attempts.
+
+
+
+# Relationship between shots on goal and blocked shots/missed shots
+
+
+```{r}
+sog_counts <- as.data.frame(table(shifts$n_sog, shifts$n_sa-shifts$n_sog)) %>%
+  rename(n_sog = Var1, n_blckdandmissed=Var2) %>%
+  filter(Freq>0) %>%
+  mutate(Freq = log(Freq)) 
+
+
+ggplot(sog_counts, aes(n_sog, n_blckdandmissed)) +
+  geom_tile(aes(fill = Freq), colour = "black") +
+  scale_fill_gradient(low = "white", high = "steelblue", name="Log of count") +
+  geom_text(aes(label = round(exp(Freq),1))) +
+  labs(x="Number of shots on goal", y= "Number of blocked and missed shots") +
+  theme_minimal()
+
+```
+
+
+# How do these rates (of goals scored, shots on goal, and shot attempts) translate to league points at the team level?  
+
+```{r}
+
+# Team goal rates
+team_as_home_goal <-shifts %>%
+  group_by(home_abbreviation) %>% 
+  summarise(n_goal_home = sum(n_goal_home), shift_time_home =sum(shift_time)) %>%
+  rename(team = home_abbreviation)
+  
+team_as_away_goal <- shifts %>% 
+  group_by(away_abbreviation) %>% 
+  summarise(n_goal_away = sum(n_goal_away), shift_time_away=sum(shift_time)) %>%
+  rename(team = away_abbreviation)
+
+team_goal <- inner_join(team_as_home_goal, team_as_away_goal) %>%
+  mutate(n_goal = n_goal_home + n_goal_away, rate_goal = n_goal/(shift_time_home+shift_time_away)) %>%
+  select(team, n_goal, rate_goal)
+
+#Team shots on goal rates
+team_as_home_sog <-shifts %>%
+  group_by(home_abbreviation) %>% 
+  summarise(n_sog_home = sum(n_sog_home), shift_time_home =sum(shift_time)) %>%
+  rename(team = home_abbreviation)
+  
+team_as_away_sog <- shifts %>% 
+  group_by(away_abbreviation) %>% 
+  summarise(n_sog_away = sum(n_sog_away), shift_time_away=sum(shift_time)) %>%
+  rename(team = away_abbreviation)
+
+team_sog <- inner_join(team_as_home_sog, team_as_away_sog) %>%
+  mutate(n_sog = n_sog_home + n_sog_away, rate_sog = n_sog/(shift_time_home+shift_time_away)) %>%
+  select(team, n_sog, rate_sog)
+
+#Team shot attempts rates
+team_as_home_sa <-shifts %>%
+  group_by(home_abbreviation) %>% 
+  summarise(n_sa_home = sum(n_sa_home), shift_time_home =sum(shift_time)) %>%
+  rename(team = home_abbreviation)
+  
+team_as_away_sa <- shifts %>% 
+  group_by(away_abbreviation) %>% 
+  summarise(n_sa_away = sum(n_sa_away), shift_time_away=sum(shift_time)) %>%
+  rename(team = away_abbreviation)
+
+team_sa <- inner_join(team_as_home_sa, team_as_away_sa) %>%
+  mutate(n_sa = (n_sa_home + n_sa_away), rate_sa = n_sa/(shift_time_home+shift_time_away)) %>%
+  select(team, n_sa, rate_sa)
+
+
+#Combine
+teams <- inner_join(team_goal, team_sog) %>%
+  inner_join(., team_sa) %>%
+  filter(team != "VGK") #Weird numbers for this team
+  
+
+#Team records 
+records <- rbind(get_team_records(2018), get_team_records(2019), get_team_records(2020), get_team_records(2021)) %>% 
+  group_by(team_abbr) %>%
+  summarise(points = sum(st_points)) %>% 
+  rename(team = team_abbr)
+  
+  
+#Join records with shot data 
+  
+teams <- inner_join(teams, records)
+
+
+
+```
+
+
+```{r}
+library(gridExtra)
+pgoals <- ggplot(teams, aes(x=rate_goal, y=points)) +
+  geom_point() +
+  theme_bw() +
+  labs(x="Rate of Goals Scored", y="League Points") 
+  
+pgoals = pgoals + geom_smooth(method='lm', formula= y~x)
+
+psog <- ggplot(teams, aes(x=rate_sog, y=points)) +
+  geom_point() +
+  theme_bw() +
+  labs(x="Rate of Shots on Goal", y="League Points") 
+
+psog = psog + geom_smooth(method='lm', formula= y~x)
+
+psa <- ggplot(teams, aes(x=rate_sa, y=points)) +
+  geom_point() +
+  theme_bw() +
+  labs(x="Rate of Shot Attempts", y="League Points") 
+
+psa = psa + geom_smooth(method='lm', formula= y~x)
+
+
+grid.arrange(pgoals, psog, psa)
+
+
+```
+
+
+
+
+
