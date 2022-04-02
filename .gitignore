@@ -11,3 +11,6 @@ analysis/ex
 *.html
 
 notes.rtf
+
+data/shifts_eda_cache/
+data/shifts_eda_files/
