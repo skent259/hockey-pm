@@ -46,7 +46,7 @@ get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
     select(starts_with(c("alfa", "beta")))
   
   if(length(player_names)+length(team_names) != ncol(df_of_draws)) {
-    rlang::stop(message= "`team_names` and `player_names` should match alpha columns and beta columns of pm_fit")
+    rlang::warn(message = "`team_names` and `player_names` should match alpha columns and beta columns of pm_fit")
   }
   
   np = length(player_names); nt=length(team_names)
