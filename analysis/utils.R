@@ -22,6 +22,56 @@ pull_modname <- function(fname) {
   paste0(s[1:2], collapse = "_")
 }
 
+
+
+# Combine player effect and team effect samples with matrix multiplication.
+#
+# I use the get_rosters function from the HockeyR package to obtain players' team memberships.
+# The function get_player_stats_hr from the HockeyR package would be an alternative to getting players' team memberships, but I've found that it's buggy. 
+# Note that if a player is traded during the season, they appear on both teams' rosters for that season 
+# so there will be players (e.g. Gustav Nyquist in 2019) who get multiple columns ("Gustav.Nyquist:SJS" and "Gustav.Nyquist:DET") 
+# in the output
+##-----------------------------------------------------------------------------#
+#' @param pm_fit An object containing player and team effect MCMC draws, i.e. the Stan model fit.
+#' @param season An integer giving the season in which want to check players' team memberships.
+#' @param team_names Vector of team abbreviations (Note that Vegas should be "VEG" instead of "VGK" for it to work with get_rosters function)
+#' @param player_names Vector of player names 
+#'   
+#' @return A matrix with a column of posterior samples for each player-team combination
+
+get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
+  
+  #Obtain data frame of posterior samples 
+  df_of_draws <- as.data.frame(pm_fit) %>%
+    select(starts_with(c("alfa", "beta")))
+  
+  if(length(player_names)+length(team_names) != ncol(df_of_draws)) {
+    rlang::stop(message= "`team_names` and `player_names` should match alpha columns and beta columns of pm_fit")
+  }
+  
+  np = length(player_names); nt=length(team_names)
+  X = matrix(0, nrow = np+nt, ncol = np)
+  colnames(X) = seq_len(ncol(X))
+  t = 1 #Counter for iteration through teams
+  p = 1 #Counter for iteration through players
+  
+  for (team in team_names) {
+    team_players = get_rosters(team, season)$player
+    ms = match(gsub(" ", ".", team_players), player_names)
+    
+    for (m in ms[!is.na(ms)]) {
+      X[c(t, nt+m) , p] = 1
+      colnames(X)[p] = paste(player_names[m],team_names[t], sep=":") 
+      p = p+1
+    }  
+    t = t+1
+  }
+  
+  ppt_draws = as.matrix(df_of_draws) %*% X[,1:(p-1)]
+  return(ppt_draws)  
+}
+
+
 #' Plot posterior intervals for parameters
 #'
 #' Compare to `bayesplot::mcmc_intervals()`, but uses a slightly different

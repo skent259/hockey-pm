@@ -146,6 +146,30 @@ plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names, top = top_n
   labs(title = glue("Top {top_n} Player Effects"))
 plot_post_parameter(pm_fit, vars(starts_with("beta")), player_names, top = -bottom_n) +
   labs(title = glue("Bottom {bottom_n} Player Effects"))
+
+
+
+# Combining player and team effects
+
+#All players
+season=2019
+team_names[which(team_names == "VGK")] = "VEG"
+ppt_draws = get_ppt_draws(pm_fit, season, team_names, player_names)
+plot_post_parameter(ppt_draws, pars=vars(everything()), names = colnames(ppt_draws)) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Player-team effects")
+
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(ppt_draws, pars=vars(everything()), names = colnames(ppt_draws), top = top_n) +
+  labs(title = glue("Top {top_n} Player-team Effects"))
+plot_post_parameter(ppt_draws, pars=vars(everything()), names = colnames(ppt_draws), top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Player-team Effects"))
+
+
+
 ```
 
 
