@@ -43,6 +43,16 @@ get_nongoalie_players <- function(df) {
   x[!is.na(x)]
 }
 
+#' Get all goalies from a data frame
+#' 
+#' @param df A data-frame with structure based on `hockeyR::load_pbp()`.
+#' 
+#' @return A vector of goalie names contained in `df`. 
+get_all_goalies <- function(df) {
+  x <- df %>% unique_across(c(ends_with("_goalie")))
+  x[!is.na(x)]
+}
+
 #' Get all teams from a data frame
 #' 
 #' @param df A data-frame with structure based on `hockeyR::load_pbp()`.
@@ -325,4 +335,220 @@ build_sog_data <- function(season) {
     )
   
   return(change_df)
+}
+
+#' Build shots-on-goal model data
+#'
+#' This function creates a data frame where each row represents a 'shift' in
+#' hockey. For each shift, information is recorded about an outcome (i.e. shots
+#' on goal), and the teams and players involved on the ice during that shift. It
+#' returns a sparse matrix where columns can be used for modeling: 1.) the
+#' outcome, 2.) shift time, 3.) offensive and defensive team flags, 4.)
+#' offensive and defensive players flags, where goalies only have defensive
+#' flags.  Entries besides shift time come from 0, -1, or +1.  More details on
+#' the formulation are available in `data_explanation.Rmd`.
+#'
+#' Shifts are excluded if they take up no time (e.g. at the start of a game, or
+#' between periods) of if they do not occur during a regular time, 5v5 scenario.
+#' This excludes power plays, 4v4, empty net, and all overtime shifts.
+#' Play-by-play data is pulled using `hockeyR::load_pbp()`.
+#'
+#' Note: the shift-level data is much larger than goal-level, and takes a few
+#' minutes to process. 
+#'
+#' @param season The season(s) of interest, as passed to `hockeyR::load_pbp()`.
+#' @param method How to construct the data, with options `"off-def"` for
+#'   separate offensive and defensive estimates.
+#' @param outcome A character of vector indicating the outcome(s) to use.  If a
+#'   vector is used, the total outcome will be calculated.  Options follow from
+#'   the output of `build_sog_data()`, which include `c('n_goal', 'n_shot',
+#'   'n_missshot', 'n_blkdshot')` or any combination thereof.
+#'
+#' @return A sparse matrix for modeling
+build_sog_model_data <- function(season, method = c("off-def"), outcome = "n_shot") {
+  method <- match.arg(method, c("off-def"))
+  outcome <- match.arg(
+    outcome,
+    c("n_goal", "n_shot", "n_missshot", "n_blkdshot"),
+    several.ok = TRUE
+  )
+  
+  change_df <- build_sog_data(season)
+  
+  # Convert to data-frame for filling sparse matrix
+  sparse_df_from_row <- function(row, method) {
+    # For each shift, specify the row, column, and value to fill the sparse 
+    # matrix such that we have
+    # - y: shots on goal by team A in shift i
+    # - team effects (off & def): +1 on off effect of team A, -1 on def effect of their opponent
+    # - player effects (off): +1 on off effect of all players on team A on ice
+    # - player effects (def): -1 on def effect of all players on opponent of team A
+    
+    i <- row$i
+    home_cols <- c(paste0("home_on_", 1:5))
+    away_cols <- c(paste0("away_on_", 1:5))
+    
+    n_p <- length(home_cols)
+    
+    cols <- unlist(c(
+      "y", # y
+      "shift_time", # shift time
+      paste0(row$home_abbreviation, c("_O", "_D")), # teams 
+      paste0(row$away_abbreviation, c("_O", "_D")), # teams
+      row[home_cols], row[away_cols], # players
+      row$home_goalie, row$away_goalie # goalie
+    ))
+    cols <- c(cols, cols)
+    
+    rows <- c(
+      rep(2*i-1, length(cols) / 2), 
+      rep(2*i, length(cols) / 2)
+    )
+    
+    values <- c(
+      ## shots on goal by home team
+      row$n_shot_home, # y
+      row$shift_time, # shift time
+      1, 0, # teams (home off, home def)
+      0, -1, # teams (away off, away def)
+      rep(1, n_p), rep(-1, n_p), # players (home, away)
+      0, -1, # goalie (home, away)
+      
+      ## shots on goal by away team
+      row$n_shot_away, # y
+      row$shift_time, # shift time
+      0, -1, # teams (home off, home def)
+      1, 0, # teams (away off, away def)
+      rep(-1, n_p), rep(1, n_p), # players (home, away)
+      -1, 0 # goalie (home, away)
+    )
+    
+    # home team is on offense in first row, defense otherwise 
+    # note: goalies only have one effect, will be at end so don't need "def"
+    def <- c(
+      rep(NA, 6), # y, shift time, teams
+      rep(FALSE, n_p), rep(TRUE, n_p), # players (home, away)
+      rep(FALSE, 2), # goalie (home, away)
+      rep(NA, 6),
+      rep(TRUE, n_p), rep(FALSE, n_p), # players (home, away)
+      rep(FALSE, 2) # goalie (home, away)
+    )
+    
+    return(tibble::tibble(rows, cols, values, def))
+  }
+  
+  sparse_df_spec <- change_df %>% 
+    mutate(i = row_number()) %>% 
+    transpose() %>% 
+    map(~sparse_df_from_row(.x, method)) %>% 
+    bind_rows()
+  
+  players <- get_nongoalie_players(change_df)
+  goalies <- get_all_goalies(change_df)
+  teams <- get_all_teams(change_df)
+  col_names <- c(
+    "y", "shift_time", 
+    as.vector(t(outer(teams, c("_O", "_D"), FUN = paste0))),
+    rep(players, 2), goalies
+  )
+  
+  sparse_df_spec <- sparse_df_spec %>% 
+    mutate(col_ind = match(cols, col_names))  %>% 
+    mutate(across(col_ind,
+                  ~if_else(def, .x + length(players), .x, missing = .x)))
+  
+  missing_col <- max(sparse_df_spec$col_ind) < length(col_names)
+  if (missing_col) {
+    sparse_df_spec <- sparse_df_spec %>% 
+      tibble::add_row(rows = 1, values = 0, col_ind = length(col_names))
+  }
+  
+  mat <- Matrix::sparseMatrix(
+    sparse_df_spec$rows, 
+    sparse_df_spec$col_ind, 
+    x = sparse_df_spec$values
+  )
+  
+  colnames(mat) <- col_names
+  Matrix::colSums(mat)
+  return(mat)
+}
+
+
+#' Run tests on shots-on-goal model data
+#'
+#' Checks the model data output for a few conditions, including:
+#' - Player rows should sum to 0
+#' - Player rows should have 12 non-zero entries
+#' - Team rows should sum to 0
+#' - Team rows should have 2 non-zero entries
+#' 
+#' This function will print the errors if it sees any.  
+#'
+#' Note: this is probably better to have in a testing framework, but this works
+#' for now.  
+#' 
+#' @param mat A matrix output from `build_sog_model_data()`.
+#' @inheritParams build_sog_model_data
+#' 
+#' @return Nothing
+check_sog_model_data <- function(mat, method = c("off-def")) {
+  method <- match.arg(method, c("off-def"))
+  X_teams <- mat[, 3:64] # 2 cols for each team 
+  X_play <- mat[, 65:ncol(mat)]
+  
+  # Sum across team rows should be 0
+  check <- sum(Matrix::rowSums(X_teams)) != 0
+  if (check != 0) {
+    print("Team rows don't cancel out")
+  }
+  
+  # Player rows should sum to -1
+  check <- sum(Matrix::rowSums(X_play) != -1)
+  if (check != 0) {
+    print("Some player rows are not -1 in sum")
+  }
+  
+  # Player rows should have 11 non-zero entries
+  n_nonzero <- 11
+  check <- sum(Matrix::rowSums(abs(X_play)) != n_nonzero) 
+  if (check != 0) {
+    print("Some player rows don't have 11 non-zero entries")
+  }
+  
+  # Team rows should have 2 non-zero entries
+  check <- sum(Matrix::rowSums(abs(X_teams)) != 2)
+  if (check != 0) {
+    print("Some team rows don't have 2 non-zero entries")
+  }
+  
+  # Team columns (in pairs) should cancel out
+  check <- all(colSums(matrix(Matrix::colSums(X_teams), nrow = 2)) != 0)
+  if (check != 0) {
+    print("Some team shifts may be missing, offensive and defensive numbers don't cancel")
+  }
+  
+  n_nongoalie <- ncol(X_play) - length(unique(colnames(X_play)))
+  player_col_sums <- Matrix::colSums(X_play[, seq_len(2*n_nongoalie)])
+  check <- all(rowSums(matrix(player_col_sums, ncol = 2)) != 0)
+  if (check != 0) {
+    print("Some players don't have equal number of offensive and defensive shifts")
+  }
+  
+}
+
+
+#' Shorten the outcomes string
+#' 
+#' @param x The argument `outcome` in `build_sog_model_data()`. 
+#' @return A short string 
+short_outcome <- function(x) {
+  shorten <- function(x) {
+    x %>% 
+      str_remove_all("n_") %>% 
+      str_trunc(width = 2, ellipsis = "")
+  }
+  
+  x <- map_chr(x, shorten)
+  paste0(x, collapse = "-")
 }
