@@ -387,6 +387,8 @@ build_sog_model_data <- function(season, method = c("off-def"), outcome = "n_sho
     i <- row$i
     home_cols <- c(paste0("home_on_", 1:5))
     away_cols <- c(paste0("away_on_", 1:5))
+    home_outc <- paste0(outcome, "_home")
+    away_outc <- paste0(outcome, "_away")
     
     n_p <- length(home_cols)
     
@@ -407,7 +409,7 @@ build_sog_model_data <- function(season, method = c("off-def"), outcome = "n_sho
     
     values <- c(
       ## shots on goal by home team
-      row$n_shot_home, # y
+      sum(unlist(row[home_outc])), # y
       row$shift_time, # shift time
       1, 0, # teams (home off, home def)
       0, -1, # teams (away off, away def)
@@ -415,7 +417,7 @@ build_sog_model_data <- function(season, method = c("off-def"), outcome = "n_sho
       0, -1, # goalie (home, away)
       
       ## shots on goal by away team
-      row$n_shot_away, # y
+      sum(unlist(row[away_outc])), # y
       row$shift_time, # shift time
       0, -1, # teams (home off, home def)
       1, 0, # teams (away off, away def)
@@ -470,7 +472,6 @@ build_sog_model_data <- function(season, method = c("off-def"), outcome = "n_sho
   )
   
   colnames(mat) <- col_names
-  Matrix::colSums(mat)
   return(mat)
 }
 
