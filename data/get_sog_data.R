@@ -28,7 +28,7 @@ saveRDS(out, here(data_dir, fname))
 ##-----------------------------------------------------------------------------#
 
 ## Shots on goal --------------------------------------------------------------#
-o1 <- "n_shot"
+o1 <- c("n_shot", "n_goal")
 out1 <- build_sog_model_data(seasons, outcome = o1)
 check_sog_model_data(out1)
 

@@ -11,8 +11,8 @@ source(here("analysis/utils.R"))
 
 ## Change these parameters ----------------------------------------------------#
 
-model_fname <- "ppool_off-def-ng-nt_s'18'19'20'21_2022-03-26.rds"
-data_fname <- "model-data_s'18'19'20'21_off-def-ng_2022-03-23.rds"
+model_fname <- "ppool_combined.RData"
+data_fname <- "model-data_s'18'19'20'21_combined_2022-03-24.rds"
 out_dir <- "analysis/reports"
 
 ## Build report ---------------------------------------------------------------#

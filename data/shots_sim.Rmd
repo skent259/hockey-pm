@@ -1,0 +1,95 @@
+---
+title: "Shot Data Simulation"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+<style>
+body{
+    font-size: 14pt;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(here)
+library(glue)
+library(tidyverse)
+library(Matrix)
+library(hockeyR)
+
+
+```
+
+
+# Real Data
+
+```{r}
+data_fname = "data/sog-data_s'18'19'20'21_2022-04-01.rds"
+shifts <- readRDS(here(data_fname))
+shifts <- as.tibble(shifts) %>%
+  mutate(n_sog_home=n_shot_home+n_goal_home, n_sog_away= n_shot_away+n_goal_away, n_sog=n_sog_home+n_sog_away) %>%
+  mutate(n_sa_home = n_sog_home + n_blkdshot_home + n_missshot_home, n_sa_away = n_sog_away + n_blkdshot_away + n_missshot_away, n_sa=n_sa_away+n_sa_home)
+
+shifts_data = shifts %>% select(shift_time, n_sog_home, n_sog_away, n_sog, n_sa_home, n_sa_away, n_sa)
+```
+
+
+# Generative Model for home team shot attempts 
+
+```{r}
+
+one_response <- function(off_pmean = 0, def_pmean = 0, psd = .3, off_tmean = -2.6, def_tmean = 2.6, tsd = .5,  duration_rate = .1) {
+  beta_off = rnorm(5, off_pmean, psd)
+  beta_def = rnorm(6, def_pmean, psd)
+  gamma_off = rnorm(1, off_tmean, tsd)
+  gamma_def = rnorm(1, def_tmean, tsd)
+  shift_time = rexp(1, duration_rate)
+  
+  log_lambda =  sum(beta_off) - sum(beta_def) + gamma_off - gamma_def + log(shift_time)
+  y = rpois(1, exp(log_lambda))
+  return(c(exp(log_lambda), y, shift_time))
+}
+
+x = replicate(10000, one_response())
+
+lambda = x[1,]
+sim_shots = x[2,]
+sim_shifts = x[3,]
+
+shots = head(shifts_data$n_sog_home, 10000)
+shifts = head(shifts_data$shift_time, 10000)
+
+
+```
+
+
+
+```{r}
+par(mfrow = c(2,1))
+hist(shifts)
+hist(sim_shifts)
+# Similar distributions of shift durations (Exponential with rate 0.1)
+
+table(shots)
+table(sim_shots)
+# More zeros and more counts >2 in the simulated data. More 1s and 2s in the real data 
+
+cor(shots, shifts)
+cor(sim_shots, sim_shifts)
+# Less correlation between shift duration and shot count in the simulated data
+```
+
+
+
+
+
+
+

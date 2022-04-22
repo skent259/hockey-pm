@@ -119,9 +119,11 @@ ggplot(sog_counts, aes(n_sog_home, n_sog_away)) +
   geom_text(aes(label = round(exp(Freq)))) +
   labs(x="Home team's number of shots on goal", y= "Away team's number of shots on goal") +
   theme_minimal()
-
 ```
-The counts are uncorrelated.
+```{r, echo=TRUE}
+cor(shifts$n_sog_away, shifts$n_sog_home)
+```
+The opposing teams' shots on goal are uncorrelated.
 
 
 One thing we might do is divide shots on goals by shift duration to obtain a rate of shots on goal.
@@ -138,7 +140,6 @@ ggplot(shifts, aes(x=shift_time, y=rate_sog)) +
   theme_bw() +
   labs(x="Shift duration", y="Rate of shots on goal")
 
-  
 
 ```
 There's some negative correlation: shorter shifts have higher rates. The distinct curves are due to the discreteness of the shots on goal counts.  
@@ -183,6 +184,10 @@ ggplot(sog_counts, aes(n_sa_home, n_sa_away)) +
   theme_minimal()
 
 ```
+```{r, echo=TRUE}
+cor(shifts$n_sa_away, shifts$n_sa_home)
+```
+
 
 Finally, we can divide by shift time and look at rates:
 ```{r}
