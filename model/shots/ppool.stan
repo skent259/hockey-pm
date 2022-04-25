@@ -71,7 +71,7 @@ model {
   vector[2*ns] log_lambda;
   
   //Layer 1
-  epsilon ~ gamma(s, r);
+  sigmap_squared ~ inv_gamma(s, r);
   
   //Layer 2
   mu ~ normal(meanint, sigmaint);

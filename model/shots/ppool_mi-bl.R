@@ -55,7 +55,7 @@ sigmat <- .5
 s <-  7.5
 r <- 0.5
 
-datalist <- list(ng=ns, y=y, time=time, nt=nt, np=np, ng=ng, wto=wto, vto=vto, 
+datalist <- list(ns=ns, y=y, time=time, nt=nt, np=np, ng=ng, wto=wto, vto=vto, 
                  uto=uto, nzt=nzt, wtd = wtd, vtd=vtd, utd=utd, wpo=wpo, vpo=vpo,
                  upo=upo, nzpo=nzpo, wpd=wpd, vpd=vpd, upd=upd, nzpd=nzpd, meanint=meanint,
                  sigmaint=sigmaint, sigmat=sigmat, s=s, r=r)
