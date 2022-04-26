@@ -4,7 +4,10 @@ library(rstan)
 library(Matrix)
 source(here("analysis/utils.R"))
 
-d_fname <- "sog-model-data_o-sh-go_s'18'19'20'21_2022-04-21.rds"
+rstan_options(auto_write = TRUE)
+options(mc.cores = 4)
+
+d_fname <- "sog-model-data_o-sh-go_s'21_2022-04-25.rds"
 d <- readRDS(here("data", d_fname))
 
 ## Set up data list for Stan --------------------------------------------------#
