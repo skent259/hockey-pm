@@ -7,7 +7,7 @@ source(here("data", "utils.R"))
 
 data_dir <- "data"
 
-seasons <- c("2018", "2019", "2020", "2021")
+seasons <- c("2021")
 seasons_short <- map_chr(seasons, ~ str_trunc(.x, width = 3, side = "left", ellipsis = "'"))
 seasons_short <- paste0(seasons_short, collapse = "")
 
