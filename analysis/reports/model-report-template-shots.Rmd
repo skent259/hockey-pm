@@ -1,0 +1,200 @@
+---
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+<style>
+body{
+    font-size: 14pt;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE,
+    cache = FALSE,
+    warning = FALSE,
+    message = FALSE,
+    fig.align = "center"
+)
+
+library(tidyverse)
+library(here)
+library(glue)
+library(rstan)
+library(bayesplot)
+library(patchwork)
+source(here("analysis/utils.R"))
+
+bayesplot::color_scheme_set("red")
+
+```
+
+```{r}
+## Defaults --------------------------------------------------------------#
+
+if (!exists("params")) {
+  params <- list(
+    model_fname = "model/ppool_combined.RData",
+    data_fname = "data/model-data_s'18'19'20'21_combined_2022-03-10.rds"
+  )
+}
+
+
+```
+
+
+```{r}
+
+## Pull in model --------------------------------------------------------------#
+ext <- tools::file_ext(params[["model_fname"]])
+if (ext == "RData") {
+  load(file = here(params[["model_fname"]])) # `pm_fit`  
+} else if (ext == "rds") {
+  pm_fit <- readRDS(here(params[["model_fname"]]))
+}
+
+
+#params$data_fname <- "data/model-data_s'18'19'20'21_combined_2022-03-24.rds"
+model_data <- readRDS(here(params[["data_fname"]]))
+
+
+names = model_data@Dimnames[[2]]
+team_names <- names[seq(3, 63, by=2)] %>%
+  str_sub(start=1, end=3)
+
+np = which(names == names[65])[2]-65 #Number of non-goalie players
+ng = ncol(model_data) - 2*np - 64 #Number of total players
+ng_player_names <- names[64+1:np] #Non-goalie player names 
+player_names <-  names[64+np+1:(np+ng)]
+model <- pull_modname(params[["model_fname"]])
+```
+
+
+
+---
+title: "An analysis of `r pull_modname(params[["model_fname"]])` model"
+---
+
+## Parameter Estimates 
+
+### Team
+```{r}
+# Team Offensive effects 
+plot_post_parameter(pm_fit, vars(starts_with("alfa_off")), team_names) +
+  labs(title = "Team Offensive Effects")
+# mcmc_intervals(pm_fit, vars(starts_with("alfa_off")))
+```
+```{r}
+# Team Defensive effects 
+plot_post_parameter(pm_fit, vars(starts_with("alfa_def")), team_names) +
+  labs(title = "Team Defensive Effects")
+# mcmc_intervals(pm_fit, vars(starts_with("alfa_def")))
+```
+
+### Player
+
+```{r}
+
+###### Offensive Effects ##########
+# All players.  Note the updated aesthetic allows this to be readable, even if
+# we can't pull out individual players
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), ng_player_names) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Offensive Player Effects")
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), ng_player_names, top = top_n) +
+  labs(title = glue("Top {top_n} Offensive Player Effects"))
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), ng_player_names, top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Offensive Player Effects"))
+
+
+######### Defensive Effects ################
+# All players.  Note the updated aesthetic allows this to be readable, even if
+# we can't pull out individual players
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Defensive Player Effects")
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names, top = top_n) +
+  labs(title = glue("Top {top_n} Defensive Player Effects"))
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names, top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Defensive Player Effects"))
+
+
+
+
+```
+
+
+```{r}
+# The bayesplot default is fine for now.  See https://mc-stan.org/bayesplot/.
+bayesplot::mcmc_hist(pm_fit, pars = "mu") +
+  labs(title = "Regression intercept across MCMC iterations")
+
+bayesplot::mcmc_hist(pm_fit, pars = "sigmap") +
+  labs(title = "Player effect standard deviation across MCMC iterations")
+```
+
+## Diagnostics
+
+
+```{r}
+## Diagnostics ----------------------------------------------------------------#
+
+mcmc_trace(pm_fit, pars = "mu") +
+  labs(x = "Iteration", title = "MCMC chain plot for regression effect intercept")
+
+mcmc_trace(pm_fit, pars = "sigmap") +
+  labs(x = "Iteration", title = "MCMC chain plot for player effect standard deviation")
+
+```
+
+
+```{r, echo=TRUE}
+
+#Effective sample sizes
+bayesplot::neff_ratio(pm_fit, pars = "mu")
+bayesplot::neff_ratio(pm_fit, pars = "sigmap")
+bayesplot::neff_ratio(pm_fit, pars = "alfa_off")
+bayesplot::neff_ratio(pm_fit, pars = "alfa_def")
+bayesplot::neff_ratio(pm_fit, pars = "beta_off") %>% head()
+bayesplot::neff_ratio(pm_fit, pars = "beta_def") %>% head()
+
+
+
+#Rhat statistics 
+fit_summary = summary(pm_fit)
+fit_summary$summary[c("mu", "alfa_off[1]", "alfa_def[1]", "beta_off[1]", "beta_def[1]", "sigmap"),"Rhat"]
+
+#plot_rhat_multi(pm_fit, par_list) +
+  #patchwork::plot_annotation(title = "Rhat plot")
+
+
+#plot_neff_multi(pm_fit, par_list) +
+  #patchwork::plot_annotation(title = "Effective sample size plot")
+
+```
+
+
+### Sample Auto Correlation Plots
+
+```{r, eval=FALSE}
+mcmc_acf(pm_fit, pars = "mu", lags=100)
+mcmc_acf(pm_fit, pars = "sigmap", lags = 100)
+mcmc_acf(pm_fit, pars = "alfa_off[1]", lags = 100)
+mcmc_acf(pm_fit, pars = "alfa_def[1]", lags = 100)
+mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
+mcmc_acf(pm_fit, pars = "beta_def[1]", lags = 100)
+
+```
+
+
+
+
