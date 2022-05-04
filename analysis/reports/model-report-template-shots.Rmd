@@ -132,6 +132,51 @@ plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names, top = -
 
 ```
 
+### Player-Team Combined
+```{r}
+# Combining player and team effects
+
+
+season=2021
+team_names[which(team_names == "VGK")] = "VEG"
+
+## Offensive
+df_of_draws_off <- as.data.frame(pm_fit) %>%
+      select(starts_with(c("alfa_off", "beta_off")))
+ppt_draws_off = get_ppt_draws(df_of_draws_off, season, team_names, ng_player_names)
+plot_post_parameter(ppt_draws_off, pars=vars(everything()), names = colnames(ppt_draws_off)) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Offensive Player-team effects")
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(ppt_draws_off, pars=vars(everything()), names = colnames(ppt_draws_off), top = top_n) +
+  labs(title = glue("Top {top_n} Offensive Player-team Effects"))
+plot_post_parameter(ppt_draws_off, pars=vars(everything()), names = colnames(ppt_draws_off), top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Offensive Player-team Effects"))
+
+
+
+## Defensive 
+df_of_draws_def <- as.data.frame(pm_fit) %>%
+      select(starts_with(c("alfa_def", "beta_def")))
+ppt_draws_def = get_ppt_draws(df_of_draws_def, season, team_names, player_names)
+plot_post_parameter(ppt_draws_def, pars=vars(everything()), names = colnames(ppt_draws_def)) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Defensive Player-team effects")
+
+# top 30 players; bottom 30 players 
+top_n <- 30
+bottom_n <- 30
+plot_post_parameter(ppt_draws_def, pars=vars(everything()), names = colnames(ppt_draws_def), top = top_n) +
+  labs(title = glue("Top {top_n} Defensive Player-team Effects"))
+plot_post_parameter(ppt_draws_def, pars=vars(everything()), names = colnames(ppt_draws_def), top = -bottom_n) +
+  labs(title = glue("Bottom {bottom_n} Defensive Player-team Effects"))
+
+```
+
+
 
 ```{r}
 # The bayesplot default is fine for now.  See https://mc-stan.org/bayesplot/.

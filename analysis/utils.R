@@ -32,7 +32,7 @@ pull_modname <- function(fname) {
 # so there will be players (e.g. Gustav Nyquist in 2019) who get multiple columns ("Gustav.Nyquist:SJS" and "Gustav.Nyquist:DET") 
 # in the output
 ##-----------------------------------------------------------------------------#
-#' @param pm_fit An object containing player and team effect MCMC draws, i.e. the Stan model fit.
+#' @param pm_fit An object containing player and team effect MCMC draws, either the Stan model fit or a data frame 
 #' @param season An integer giving the season in which want to check players' team memberships.
 #' @param team_names Vector of team abbreviations (Note that Vegas should be "VEG" instead of "VGK" for it to work with get_rosters function)
 #' @param player_names Vector of player names 
@@ -42,15 +42,19 @@ pull_modname <- function(fname) {
 get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
   
   #Obtain data frame of posterior samples 
-  df_of_draws <- as.data.frame(pm_fit) %>%
-    select(starts_with(c("alfa", "beta")))
+  if (!is.data.frame(pm_fit)) {
+    df_of_draws <- as.data.frame(pm_fit) %>%
+      select(starts_with(c("alfa", "beta")))
+  } else {
+    df_of_draws = pm_fit
+  }
   
   if(length(player_names)+length(team_names) != ncol(df_of_draws)) {
     rlang::warn(message = "`team_names` and `player_names` should match alpha columns and beta columns of pm_fit")
   }
   
   np = length(player_names); nt=length(team_names)
-  X = matrix(0, nrow = np+nt, ncol = np)
+  X = matrix(0, nrow = np+nt, ncol = 1.2*np) #Extra room in case there are players on multiple teams
   colnames(X) = seq_len(ncol(X))
   t = 1 #Counter for iteration through teams
   p = 1 #Counter for iteration through players
@@ -70,6 +74,7 @@ get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
   ppt_draws = as.matrix(df_of_draws) %*% X[,1:(p-1)]
   return(ppt_draws)  
 }
+
 
 
 #' Plot posterior intervals for parameters
