@@ -46,7 +46,7 @@ datalist <- list(ns=ns, y=y, time=time, np=np, ng=ng, wpo=wpo, vpo=vpo,
 
 
 
-pm_mod <- stan_model(file = here("model", "shots", "ppool.stan"))
+pm_mod <- stan_model(file = here("model", "shots", "ppool_nt.stan"))
 pm_fit <- sampling(object = pm_mod, 
                    data = datalist)
 
