@@ -66,7 +66,7 @@ pm_fit <- sampling(object = pm_mod,
 
 seasons <- pull_seasons(d_fname)
 model_fname <- glue::glue("ppool_{outcome}_nt_{seasons}_{lubridate::today()}.rds")
-saveRDS(pm_fit, here("model", "shots", model_fname))
+saveRDS(pm_fit, here("model", "shots","output", model_fname))
 
 
 
