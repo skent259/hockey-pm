@@ -7,10 +7,25 @@ source(here("analysis/utils.R"))
 rstan_options(auto_write = TRUE)
 options(mc.cores = 4)
 
-d_fname <- "sog-model-data_o-mi-bl_s'21_2022-04-25.rds"
-d <- readRDS(here("data", d_fname))
+## Command line arguments -----------------------------------------------------#
+#' @argument `outcome` Outcome variable to use, options are 'mi-bl' and 'sh-go'
+#' @argument `d_fname` name of the data set to use 
+args = commandArgs(trailingOnly = TRUE)
+print(args)
+
+outcome <- args[1]
+d_fname <- as.integer(args[2]) + 1
+
+#' Set defaults for interactive session 
+set_default <- function(.x, val) { 
+  if(is.na(.x)) val else .x 
+}
+outcome <- set_default(outcome, "sh-go")
+d_fname <- set_default(d_fname, "sog-model-data_o-sh-go_s'21_2022-04-25.rds")
+
 
 ## Set up data list for Stan --------------------------------------------------#
+d <- readRDS(here("data", d_fname))
 
 ns = nrow(d)/2 #Number of shifts
 y <- d[,1] #Number of shots on goal by a given team in a given shift
@@ -52,7 +67,12 @@ vpd = spVecsPD$v
 upd = spVecsPD$u
 nzpd = length(wpd)
 
-meanint = -5.5 #Based on simulation
+
+meanint = switch( # Based on simulation
+    outcome,
+    "sh-go" = -5, 
+    "mi-bl" = -5.5
+)
 sigmaint = 1
 sigmat <- .5
 s <-  7.5
@@ -63,15 +83,13 @@ datalist <- list(ns=ns, y=y, time=time, nt=nt, np=np, ng=ng, wto=wto, vto=vto,
                  upo=upo, nzpo=nzpo, wpd=wpd, vpd=vpd, upd=upd, nzpd=nzpd, meanint=meanint,
                  sigmaint=sigmaint, sigmat=sigmat, s=s, r=r)
 
-
+## Run model and save ---------------------------------------------------------#
 
 pm_mod <- stan_model(file = here("model", "shots", "ppool.stan"))
 pm_fit <- sampling(object = pm_mod, 
                    data = datalist)
 
 seasons <- pull_seasons(d_fname)
-model_fname <- glue::glue("ppool_mi-bl_{seasons}_{lubridate::today()}.rds")
-saveRDS(pm_fit, here("model", "shots", model_fname))
-
-
+model_fname <- glue::glue("ppool_{outcome}_{seasons}_{lubridate::today()}.rds")
+saveRDS(pm_fit, here("model", "shots", "output", model_fname))
 

@@ -1,0 +1,39 @@
+# Condor submission file for R.
+
+Universe    =   vanilla
+Executable  =   /s/bin/R41
+batch_name  =   shots-ppool
+initialdir  =   /ua/spkent/hockey-pm
+input		=   model/shots/ppool_shots.R
+arguments	=   --vanilla --args $(outcome) $(d_fname)
+environment =   "PATH=/s/pkg/linux64/gcc/8.3.0/bin:$PATH" 
+
+request_cpus = 4
+request_memory = 8000M
+
+# only run 1000/3 = 333 jobs at once 
+concurrency_limits = spkent:3
+
+# -----
+# Send the job to Held state on failure.
+on_exit_hold = (ExitBySignal == True) || (ExitCode != 0)
+ 
+# Periodically retry the jobs every 10 minutes, up to a maximum of 10 retries.
+periodic_release = (NumJobStarts < 20) && ((CurrentTime - EnteredCurrentStatus) > 100)
+# -----
+
+output		=	condor/logs/shots-ppool/$(outcome)/$(batch_name)_$(outcome)_$(season)_2022-05-01.out
+error       =   condor/logs/shots-ppool/$(outcome)/$(batch_name)_$(outcome)_$(season)_2022-05-01.err
+log         =   condor/logs/shots-ppool/$(outcome)/$(batch_name)_$(outcome)_$(season)_2022-05-01.log
+
+queue outcome, season, d_fname from (
+    # sh-go, s'21, sog-model-data_o-sh-go_s'21_2022-04-25.rds
+    sh-go, s'20, sog-model-data_o-sh-go_s'20_2022-05-03.rds 
+    sh-go, s'19, sog-model-data_o-sh-go_s'19_2022-05-03.rds
+    sh-go, s'18, sog-model-data_o-sh-go_s'18_2022-05-03.rds
+    # mi-bl, s'21, sog-model-data_o-mi-bl_s'21_2022-04-25.rds
+    # mi-bl, s'20, sog-model-data_o-mi-bl_s'20_2022-05-03.rds
+    mi-bl, s'19, sog-model-data_o-mi-bl_s'19_2022-05-03.rds
+    mi-bl, s'18, sog-model-data_o-mi-bl_s'18_2022-05-03.rds
+)
+
