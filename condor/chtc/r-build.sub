@@ -1,0 +1,16 @@
+# R build file
+# see https://chtc.cs.wisc.edu/uw-research-computing/r-jobs.html for use instructions
+
+universe = vanilla
+log = chtc/logs/interactive.log
+
+# Choose a version of R from the table above
+transfer_input_files = http://proxy.chtc.wisc.edu/SQUID/chtc/R412.tar.gz
+
++IsBuildJob = true
+requirements = (OpSysMajorVer =?= 7)
+request_cpus = 1
+request_memory = 4GB
+request_disk = 2GB
+
+queue

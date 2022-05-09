@@ -16,3 +16,4 @@ data/shifts_eda_cache/
 data/shifts_eda_files/
 
 condor/logs/*
+.bash_history

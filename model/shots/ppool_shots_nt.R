@@ -14,7 +14,7 @@ args = commandArgs(trailingOnly = TRUE)
 print(args)
 
 outcome <- args[1]
-d_fname <- as.integer(args[2]) + 1
+d_fname <- args[2]
 
 #' Set defaults for interactive session 
 set_default <- function(.x, val) { 
