@@ -1,7 +1,11 @@
-install.packages("tidyverse")
-install.packages("devtools")
-install.packages("here")
-install.packages("glue")
-install.packages("Matrix")
-install.packages("rstan")
+install.packages(c(
+    "tidyverse",
+    "devtools",
+    "here",
+    "glue",
+    "Matrix",
+    "rstan"
+))
 devtools::install_github("danmorse314/hockeyR")
+
+
