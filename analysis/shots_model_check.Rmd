@@ -1,0 +1,189 @@
+---
+title: "What's our model learning?"
+author: "Evan Gorstein"
+date: "5/9/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE,
+    cache = FALSE,
+    warning = FALSE,
+    message = FALSE,
+    fig.align = "center"
+)
+
+library(tidyverse)
+library(here)
+library(glue)
+library(rstan)
+library(bayesplot)
+library(patchwork)
+source(here("analysis/utils.R"))
+
+bayesplot::color_scheme_set("red")
+
+```
+
+
+
+```{r}
+#Pull in model
+mod_dir <- "model/shots/output"
+model_fname <- "ppool_sh-go_nt_s'21_2022-05-09.rds"
+pm_fit <- readRDS(here(mod_dir,model_fname))
+
+#Pull in data
+data_dir <- "data"
+data_fname <- "sog-model-data_o-sh-go_s'21_2022-04-25.rds"
+model_data <- readRDS(here(data_dir, data_fname))
+
+
+names = model_data@Dimnames[[2]]
+team_names <- names[seq(3, 63, by=2)] %>%
+  str_sub(start=1, end=3)
+
+np = which(names == names[65])[2]-65 #Number of non-goalie players
+ng = ncol(model_data) - 2*np - 64 #Number of total players
+ng_player_names <- names[64+1:np] #Non-goalie player names 
+player_names <-  names[64+np+1:(np+ng)]
+model <- pull_modname(model_fname)
+```
+
+
+
+```{r}
+fit_summary <- summary(pm_fit) #Posterior summary with row for each parameter
+
+#Take columns of data matrix corresponding to offensive parameters 
+model_data_off <- model_data[,c(1,2,64+1:np)]
+
+#Take rows of fit_summary corresponding to offensive player effects 
+off_players <- data.frame(fit_summary$summary[1+(1:np),])
+row.names(off_players) <- ng_player_names
+
+#Add number of shifts as a column
+off_players$appear <- Matrix::colSums(model_data_off)[-c(1,2)]
+
+
+#Add total ice time as a column
+get_player_var = function(player, var, data_set) {
+  shifts = which(data_set[,player]!=0)
+  sum(data_set[shifts,var])
+}
+off_players$ice_time = map_dbl(ng_player_names, get_player_var, var= "shift_time", data_set=model_data_off)
+
+#Add shots on goal while on ice as a column
+off_players$sog = map_dbl(ng_player_names, get_player_var, var= "y", data_set=model_data_off)
+
+
+## Same thing for defense
+model_data_def <- model_data[,c(1,2,64+np+1:(np+ng))]
+
+def_players <- data.frame(fit_summary$summary[(2+np):(2*np+ng+1),])
+row.names(def_players) <- player_names
+
+def_players$appear <- -Matrix::colSums(model_data_def)[-c(1,2)]
+def_players$ice_time = map_dbl(player_names, get_player_var, var="shift_time", model_data_def)
+def_players$sog = map_dbl(player_names, get_player_var, var="y", model_data_def)
+
+def_players_ng = def_players[1:np,] #non-goalie defensive effects
+def_players_g = def_players[(np+1):nrow(def_players),]
+
+```
+
+
+## Checking relationship between number of appearances in data and effect estimates
+
+```{r}
+ggplot(off_players, aes(x=appear, y=X50.)) + 
+  geom_point() +
+  ggtitle("Offensive effect posterior median \nversus number of shifts for all players")
+  
+```
+
+
+```{r}
+ggplot(def_players_ng, aes(x=appear, y=X50.)) + 
+  geom_point() +
+  ggtitle("Defensive effect posterior median \nversus number of shifts for non-goalies")
+```
+
+```{r}
+
+ggplot(def_players_g, aes(x=appear, y=X50.)) + 
+  geom_point() +
+  ggtitle("Defensive effect posterior median \nversus number of shifts for goalies")
+```
+
+
+# Checking relationship between number of appearances in data and length of credible intervals 
+
+```{r}
+def_players_ng %>% 
+  mutate(length_50 = X75. - X25.) %>%
+  ggplot(aes(x=appear, y=length_50)) +
+  geom_point() +
+  xlab(label= "Number of shifts") +
+  ylab(label = "Length of 50% credible interval") +
+  ggtitle("Defensive effects, non-goalies")
+```
+
+```{r}
+def_players_g %>% 
+  mutate(length_50 = X75. - X25.) %>%
+  ggplot(aes(x=appear, y=length_50)) +
+  geom_point() +
+  xlab(label= "Number of shifts") +
+  ylab(label = "Length of 50% credible interval") +
+  ggtitle("Defensive effects, goalies")
+```
+
+```{r}
+off_players %>% 
+  mutate(length_50 = X75. - X25.) %>%
+  ggplot(aes(x=appear, y=length_50)) +
+  geom_point() +
+  xlab(label= "Number of shifts") +
+  ylab(label = "Length of 50% credible interval") +
+  ggtitle("Offensive effects, all players")
+```
+
+
+## Checking relationship between number of shots on goal while on ice and effect estimates
+
+```{r}
+off_players %>%
+  mutate(sog_rate = sog/ice_time) %>%
+  ggplot(aes(x=sog_rate, y=X50.)) + 
+  geom_point() +
+  xlab(label="Shots on goal per second")+
+  ylab(label="Effect posterior median") +
+  ggtitle("Offensive effect estimate \nversus teams' shots on goal rate while player is on ice")
+```
+
+
+```{r}
+def_players_ng %>%
+  mutate(sog_rate = sog/ice_time) %>%
+  ggplot(aes(x=sog_rate, y=X50.)) + 
+  geom_point() +
+  xlab(label="Shots on goal per second")+
+  ylab(label="Effect posterior median") +
+  ggtitle("Defensive effect estimate versus opposing \nteams' shots on goal rate while player is on ice")
+```
+
+
+```{r}
+def_players_g %>%
+  mutate(sog_rate = sog/ice_time) %>%
+  ggplot(aes(x=sog_rate, y=X50.)) + 
+  geom_point() +
+  ggtitle("Defensive effect posterior median \nversus opposing teams' shots on goal per second while player is on ice")
+```
+
+
+
+
+

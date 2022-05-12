@@ -11,12 +11,12 @@ source(here("analysis/utils.R"))
 
 ## Change these parameters ----------------------------------------------------#
 
-model_fname <- "ppool_mi-bl_s'21_2022-04-30.rds"
-data_fname <- "sog-model-data_o-mi-bl_s'21_2022-04-25.rds"
+model_fname <- "ppool_sh-go_nt_s'21_2022-05-09.rds"
+data_fname <- "sog-model-data_o-sh-go_s'21_2022-04-25.rds"
 out_dir <- "analysis/reports"
 
 ## Build report ---------------------------------------------------------------#
-mod_dir <- "model/shots"
+mod_dir <- "model/shots/output"
 data_dir <- "data"
 
 temp_fname <- here("analysis/reports", "model-report-template-shots.Rmd")

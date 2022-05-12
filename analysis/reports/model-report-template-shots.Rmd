@@ -71,21 +71,24 @@ model <- pull_modname(params[["model_fname"]])
 ```
 
 
+```{r}
+teams_included = !grepl("nt",model)
+```
+
 
 ---
-title: "An analysis of `r pull_modname(params[["model_fname"]])` model"
+title: "An analysis of `r model` model"
 ---
 
 ## Parameter Estimates 
 
 ### Team
-```{r}
+```{r, eval = teams_included}
 # Team Offensive effects 
 plot_post_parameter(pm_fit, vars(starts_with("alfa_off")), team_names) +
   labs(title = "Team Offensive Effects")
 # mcmc_intervals(pm_fit, vars(starts_with("alfa_off")))
-```
-```{r}
+
 # Team Defensive effects 
 plot_post_parameter(pm_fit, vars(starts_with("alfa_def")), team_names) +
   labs(title = "Team Defensive Effects")
@@ -133,7 +136,7 @@ plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names, top = -
 ```
 
 ### Player-Team Combined
-```{r}
+```{r, eval=teams_included}
 # Combining player and team effects
 
 
@@ -207,8 +210,10 @@ mcmc_trace(pm_fit, pars = "sigmap") +
 #Effective sample sizes
 bayesplot::neff_ratio(pm_fit, pars = "mu")
 bayesplot::neff_ratio(pm_fit, pars = "sigmap")
-bayesplot::neff_ratio(pm_fit, pars = "alfa_off")
-bayesplot::neff_ratio(pm_fit, pars = "alfa_def")
+if (teams_included) {
+  bayesplot::neff_ratio(pm_fit, pars = "alfa_off")
+  bayesplot::neff_ratio(pm_fit, pars = "alfa_def")
+}
 bayesplot::neff_ratio(pm_fit, pars = "beta_off") %>% head()
 bayesplot::neff_ratio(pm_fit, pars = "beta_def") %>% head()
 
@@ -216,7 +221,11 @@ bayesplot::neff_ratio(pm_fit, pars = "beta_def") %>% head()
 
 #Rhat statistics 
 fit_summary = summary(pm_fit)
-fit_summary$summary[c("mu", "alfa_off[1]", "alfa_def[1]", "beta_off[1]", "beta_def[1]", "sigmap"),"Rhat"]
+example_parameters = c('mu', 'beta_off[1]', 'beta_def[1]', 'sigmap')
+if (teams_included){
+  example_parameters = c(example_parameters, 'alfa_off[1]', 'alfa_def[1]')
+}
+fit_summary$summary[example_parameters,"Rhat"]
 
 #plot_rhat_multi(pm_fit, par_list) +
   #patchwork::plot_annotation(title = "Rhat plot")
@@ -233,8 +242,10 @@ fit_summary$summary[c("mu", "alfa_off[1]", "alfa_def[1]", "beta_off[1]", "beta_d
 ```{r, eval=FALSE}
 mcmc_acf(pm_fit, pars = "mu", lags=100)
 mcmc_acf(pm_fit, pars = "sigmap", lags = 100)
+if (teams_included) {
 mcmc_acf(pm_fit, pars = "alfa_off[1]", lags = 100)
 mcmc_acf(pm_fit, pars = "alfa_def[1]", lags = 100)
+}
 mcmc_acf(pm_fit, pars = "beta_off[1]", lags = 100)
 mcmc_acf(pm_fit, pars = "beta_def[1]", lags = 100)
 

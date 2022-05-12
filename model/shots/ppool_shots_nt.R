@@ -5,7 +5,7 @@ library(Matrix)
 source(here("analysis/utils.R"))
 
 rstan_options(auto_write = TRUE)
-options(mc.cores = 4)
+
 
 ## Command line arguments -----------------------------------------------------#
 #' @argument `outcome` Outcome variable to use, options are 'mi-bl' and 'sh-go'
@@ -62,7 +62,7 @@ datalist <- list(ns=ns, y=y, time=time, np=np, ng=ng, wpo=wpo, vpo=vpo,
 
 pm_mod <- stan_model(file = here("model", "shots", "ppool_nt.stan"))
 pm_fit <- sampling(object = pm_mod, 
-                   data = datalist)
+                   data = datalist, cores=4)
 
 seasons <- pull_seasons(d_fname)
 model_fname <- glue::glue("ppool_{outcome}_nt_{seasons}_{lubridate::today()}.rds")

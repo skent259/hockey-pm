@@ -18,8 +18,8 @@ pull_modname <- function(fname) {
   # Seasons start with 's' and contain '
   s <- tools::file_path_sans_ext(basename(fname)) 
   s <- stringr::str_split(s, "_")[[1]]
-  
-  paste0(s[1:2], collapse = "_")
+  ind <- which(grepl("s\'", s))
+  paste0(s[1:(ind-1)], collapse = "_")
 }
 
 
