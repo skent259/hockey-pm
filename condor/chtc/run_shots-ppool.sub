@@ -1,0 +1,38 @@
+# Condor submission file for R.
+
+# EXECUTION FILE
+universe    =   vanilla
+batch_name  =   shots-ppool
+initialdir  =   /home/spkent/hockey-pm
+
+executable  =   condor/chtc/run_shots-ppool.sh
+arguments   =   $(outcome) $(d_fname)
+
+# FILE TRANSFER
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = http://proxy.chtc.wisc.edu/SQUID/chtc/R412.tar.gz, condor/chtc/packages.tar.gz, model/shots/ppool_shots.R
+
+# RESOURCES
+request_cpus = 4
+request_memory = 8GB
+request_disk = 8GB
+# Requirements = (Target.HasCHTCStaging == true)
++LongJob = TRUE
+
+# OUTPUT AND LOGGING
+output		=	condor/chtc/logs/shots-ppool/$(outcome)/$(batch_name)_$(outcome)_$(season)_2022-05-09.out
+error       =   condor/chtc/logs/shots-ppool/$(outcome)/$(batch_name)_$(outcome)_$(season)_2022-05-09.err
+log         =   condor/chtc/logs/shots-ppool/$(outcome)/$(batch_name)_$(outcome)_$(season)_2022-05-09.log
+
+queue outcome, season, d_fname from (
+    # sh-go, s'21, sog-model-data_o-sh-go_s'21_2022-04-25.rds
+    sh-go, s'20, sog-model-data_o-sh-go_s'20_2022-05-03.rds 
+    sh-go, s'19, sog-model-data_o-sh-go_s'19_2022-05-03.rds
+    sh-go, s'18, sog-model-data_o-sh-go_s'18_2022-05-03.rds
+    # mi-bl, s'21, sog-model-data_o-mi-bl_s'21_2022-04-25.rds
+    # mi-bl, s'20, sog-model-data_o-mi-bl_s'20_2022-05-03.rds
+    mi-bl, s'19, sog-model-data_o-mi-bl_s'19_2022-05-03.rds
+    mi-bl, s'18, sog-model-data_o-mi-bl_s'18_2022-05-03.rds
+)
+

@@ -1,0 +1,30 @@
+MAKEFLAGS = -j8
+
+CXX14=/software/chtc/eb/GCCcore/8.3.0/bin/g++
+CXX14FLAGS=-O3 -march=native -mtune=native -fPIC
+
+# ## C++ flags
+# CXX=g++
+# CXX11=g++
+# CXX14=g++
+
+# CXXFLAGS=-O3 -march=native -Wno-ignored-attributes
+# CXX11FLAGS=-O3 -march=native -Wno-ignored-attributes
+# CXX14FLAGS=-O3 -march=native -Wno-ignored-attributes
+
+# CXXPICFLAGS=-fPIC
+# CXX11PICFLAGS=-fPIC
+# CXX14PICFLAGS=-fPIC
+
+# CXX11STD=-std=c++11
+# CXX14STD=-std=c++14
+
+# ## C flags
+# CC=gcc
+# CFLAGS=-O3 -march=native
+
+# ## Fortran flags
+# FC=gfortran
+# F77=gfortran
+# FFLAGS=-O3 -march=native
+# FCFLAGS=-O3 -march=native
