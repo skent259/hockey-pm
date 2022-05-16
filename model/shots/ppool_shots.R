@@ -1,31 +1,47 @@
 library(here)
 library(glue)
+library(readr)
 library(rstan)
+# devtools::install_github("https://github.com/skent259/chkptstanr")
+# Long story short, I updated this package to work on mac/linux.  See the
+# original repo at https://github.com/donaldRwilliams/chkptstanr
+library(chkptstanr)
 library(Matrix)
 source(here("analysis/utils.R"))
 
-rstan_options(auto_write = TRUE)
+# rstan_options(auto_write = TRUE)
 options(mc.cores = 4)
 
 ## Command line arguments -----------------------------------------------------#
 #' @argument `outcome` Outcome variable to use, options are 'mi-bl' and 'sh-go'
 #' @argument `d_fname` name of the data set to use 
-args = commandArgs(trailingOnly = TRUE)
+args <- commandArgs(trailingOnly = TRUE)
 print(args)
 
 outcome <- args[1]
 d_fname <- args[2]
 
 #' Set defaults for interactive session 
-set_default <- function(.x, val) { 
-  if(is.na(.x)) val else .x 
+set_default <- function(.x, val) {
+  if (is.na(.x)) val else .x 
 }
 outcome <- set_default(outcome, "sh-go")
 d_fname <- set_default(d_fname, "sog-model-data_o-sh-go_s'21_2022-04-25.rds")
 
+## Set up other folders -------------------------------------------------------#
+
+output_dir <- "model/shots/output"
+seasons <- pull_seasons(d_fname)
+
+chkpt_folder_nm <- glue::glue("chkpt_{outcome}_{seasons}")
+chkpt_folder <- here(output_dir, chkpt_folder_nm)
+if (!dir.exists(chkpt_folder)) {
+  chkpt_folder <- create_folder(chkpt_folder_nm, path = here(output_dir))
+}
+
 
 ## Set up data list for Stan --------------------------------------------------#
-d <- readRDS(here("data", d_fname))
+d <- readRDS(here("data", d_fname))[1:1000, ]
 
 ns = nrow(d)/2 #Number of shifts
 y <- d[,1] #Number of shots on goal by a given team in a given shift
@@ -85,11 +101,20 @@ datalist <- list(ns=ns, y=y, time=time, nt=nt, np=np, ng=ng, wto=wto, vto=vto,
 
 ## Run model and save ---------------------------------------------------------#
 
-pm_mod <- stan_model(file = here("model", "shots", "ppool.stan"))
-pm_fit <- sampling(object = pm_mod, 
-                   data = datalist)
 
-seasons <- pull_seasons(d_fname)
+# pm_mod <- stan_model(file = here("model", "shots", "ppool.stan"))
+pm_mod <- readr::read_lines(here("model/shots/ppool.stan"))
+# pm_fit <- sampling(object = pm_mod, 
+#                    data = datalist)
+
+pm_fit <- chkpt_stan(model_code = pm_mod, 
+                     data = datalist, 
+                     iter_per_chkpt = 100,
+                     parallel_chains = 4,
+                     path = chkpt_folder)
+
+draws <- combine_chkpt_draws(object = pm_fit)
+
 model_fname <- glue::glue("ppool_{outcome}_{seasons}_{lubridate::today()}.rds")
-saveRDS(pm_fit, here("model", "shots", "output", model_fname))
+saveRDS(draws, here(output_dir, model_fname))
 
