@@ -23,7 +23,9 @@ library(here)
 library(glue)
 library(rstan)
 library(bayesplot)
+library(posterior)
 library(patchwork)
+library(hockeyR)
 source(here("analysis/utils.R"))
 
 bayesplot::color_scheme_set("red")
@@ -144,8 +146,8 @@ season=2021
 team_names[which(team_names == "VGK")] = "VEG"
 
 ## Offensive
-df_of_draws_off <- as.data.frame(pm_fit) %>%
-      select(starts_with(c("alfa_off", "beta_off")))
+df_of_draws_off <- posterior::as_draws_df(pm_fit) %>%
+      select(contains(c("alfa_off", "beta_off")))
 ppt_draws_off = get_ppt_draws(df_of_draws_off, season, team_names, ng_player_names)
 plot_post_parameter(ppt_draws_off, pars=vars(everything()), names = colnames(ppt_draws_off)) +
   theme(axis.text.y = element_blank()) +
@@ -162,7 +164,7 @@ plot_post_parameter(ppt_draws_off, pars=vars(everything()), names = colnames(ppt
 
 
 ## Defensive 
-df_of_draws_def <- as.data.frame(pm_fit) %>%
+df_of_draws_def <- posterior::as_draws_df(pm_fit) %>%
       select(starts_with(c("alfa_def", "beta_def")))
 ppt_draws_def = get_ppt_draws(df_of_draws_def, season, team_names, player_names)
 plot_post_parameter(ppt_draws_def, pars=vars(everything()), names = colnames(ppt_draws_def)) +
