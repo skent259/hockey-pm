@@ -22,7 +22,19 @@ pull_modname <- function(fname) {
   paste0(s[1:(ind-1)], collapse = "_")
 }
 
-
+#' Pull outcome from file name 
+#' 
+#' Only tested for files like 'sog-model-data_o-mi-bl_s'21_2022-04-25.rds'
+#' 
+#' @param fname The data file name 
+#' @return A string like "mi-bl" indicating model
+pull_outcome <- function(fname) {
+  # Seasons start with 's' and contain '
+  s <- tools::file_path_sans_ext(basename(fname)) 
+  s <- stringr::str_split(s, "_")[[1]]
+  ind <- which(grepl("o-", s))
+  stringr::str_remove_all(s[ind], "o-")
+}
 
 # Combine player effect and team effect samples with matrix multiplication.
 #

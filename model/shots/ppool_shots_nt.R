@@ -45,7 +45,7 @@ if (condor) {
   cmdstanr::set_cmdstan_path("/ua/spkent/.cmdstan/cmdstan-2.29.2") 
 } else {
   rstan_options(auto_write = TRUE)
-  # TODO: might need to set cmdstan path here too when running locally...
+  cmdstanr::set_cmdstan_path()
 }
 
 ## Set up data list for Stan --------------------------------------------------#
