@@ -5,11 +5,14 @@ library(rstan)
 # devtools::install_github("https://github.com/skent259/chkptstanr")
 # Long story short, I updated this package to work on mac/linux.  See the
 # original repo at https://github.com/donaldRwilliams/chkptstanr
+# install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
 library(chkptstanr)
 library(Matrix)
 source(here("analysis/utils.R"))
 
 # rstan_options(auto_write = TRUE)
+cmdstanr::set_cmdstan_path("/ua/spkent/.cmdstan/cmdstan-2.29.2") 
+# TODO: make this an argument 
 options(mc.cores = 4)
 
 ## Command line arguments -----------------------------------------------------#
@@ -27,6 +30,7 @@ set_default <- function(.x, val) {
 }
 outcome <- set_default(outcome, "sh-go")
 d_fname <- set_default(d_fname, "sog-model-data_o-sh-go_s'21_2022-04-25.rds")
+print(d_fname)
 
 ## Set up other folders -------------------------------------------------------#
 
@@ -41,7 +45,7 @@ if (!dir.exists(chkpt_folder)) {
 
 
 ## Set up data list for Stan --------------------------------------------------#
-d <- readRDS(here("data", d_fname))[1:1000, ]
+d <- readRDS(here("data", d_fname))
 
 ns = nrow(d)/2 #Number of shifts
 y <- d[,1] #Number of shots on goal by a given team in a given shift
@@ -82,7 +86,6 @@ wpd = spVecsPD$w
 vpd = spVecsPD$v
 upd = spVecsPD$u
 nzpd = length(wpd)
-
 
 meanint = switch( # Based on simulation
     outcome,

@@ -12,4 +12,4 @@ rm sh-go/*.err
 rm sh-go/*.log
 rm sh-go/*.out
 
-cd .. 
+cd ../..

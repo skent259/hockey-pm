@@ -1,28 +1,52 @@
 library(here)
 library(glue)
+library(readr)
 library(rstan)
+# devtools::install_github("https://github.com/skent259/chkptstanr")
+# install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+library(chkptstanr)
 library(Matrix)
 source(here("analysis/utils.R"))
 
-rstan_options(auto_write = TRUE)
-
+options(mc.cores = 4)
 
 ## Command line arguments -----------------------------------------------------#
 #' @argument `outcome` Outcome variable to use, options are 'mi-bl' and 'sh-go'
 #' @argument `d_fname` name of the data set to use 
-args = commandArgs(trailingOnly = TRUE)
+#' @argument `condor` logical, whether to run on condor system (bcg only)
+args <- commandArgs(trailingOnly = TRUE)
 print(args)
 
 outcome <- args[1]
 d_fname <- args[2]
+condor <- isTRUE(as.logical(args[3]))
 
 #' Set defaults for interactive session 
 set_default <- function(.x, val) { 
-  if(is.na(.x)) val else .x 
+  if (is.na(.x)) val else .x 
 }
 outcome <- set_default(outcome, "sh-go")
 d_fname <- set_default(d_fname, "sog-model-data_o-sh-go_s'21_2022-04-25.rds")
+condor <- set_default(condor, FALSE)
+print(d_fname)
 
+## Set up other folders -------------------------------------------------------#
+
+output_dir <- "model/shots/output"
+seasons <- pull_seasons(d_fname)
+
+chkpt_folder_nm <- glue::glue("chkpt_ppool-nt_{outcome}_{seasons}")
+chkpt_folder <- here(output_dir, chkpt_folder_nm)
+if (!dir.exists(chkpt_folder)) {
+  chkpt_folder <- create_folder(chkpt_folder_nm, path = here(output_dir))
+}
+
+if (condor) {
+  cmdstanr::set_cmdstan_path("/ua/spkent/.cmdstan/cmdstan-2.29.2") 
+} else {
+  rstan_options(auto_write = TRUE)
+  # TODO: might need to set cmdstan path here too when running locally...
+}
 
 ## Set up data list for Stan --------------------------------------------------#
 d <- readRDS(here("data", d_fname))
@@ -50,7 +74,11 @@ vpd = spVecsPD$v
 upd = spVecsPD$u
 nzpd = length(wpd)
 
-meanint = -5.5 #Based on simulation
+meanint = switch( # Based on simulation
+    outcome,
+    "sh-go" = -5, 
+    "mi-bl" = -5.5
+)
 sigmaint = 1
 s <-  7.5
 r <- 0.5
@@ -59,14 +87,22 @@ datalist <- list(ns=ns, y=y, time=time, np=np, ng=ng, wpo=wpo, vpo=vpo,
                  upo=upo, nzpo=nzpo, wpd=wpd, vpd=vpd, upd=upd, nzpd=nzpd, meanint=meanint,
                  sigmaint=sigmaint, s=s, r=r)
 
+## Run model and save ---------------------------------------------------------#
 
-pm_mod <- stan_model(file = here("model", "shots", "ppool_nt.stan"))
-pm_fit <- sampling(object = pm_mod, 
-                   data = datalist, cores=4)
 
-seasons <- pull_seasons(d_fname)
+# pm_mod <- stan_model(file = here("model", "shots", "ppool.stan"))
+pm_mod <- readr::read_lines(here("model/shots/ppool_nt.stan"))
+# pm_fit <- sampling(object = pm_mod, 
+#                    data = datalist)
+
+pm_fit <- chkpt_stan(model_code = pm_mod, 
+                     data = datalist, 
+                     iter_per_chkpt = 50,
+                     parallel_chains = 4,
+                     path = chkpt_folder)
+
+draws <- combine_chkpt_draws(object = pm_fit)
+
 model_fname <- glue::glue("ppool_{outcome}_nt_{seasons}_{lubridate::today()}.rds")
-saveRDS(pm_fit, here("model", "shots","output", model_fname))
-
-
+saveRDS(draws, here(output_dir, model_fname))
 
