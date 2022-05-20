@@ -5,6 +5,7 @@
 
 
 *.Rhistory
+*.Rapp.history
 *.DS_Store
 analysis/ex
 
@@ -17,3 +18,5 @@ data/shifts_eda_files/
 
 condor/logs/*
 .bash_history
+
+model/shots/output/chkpt*

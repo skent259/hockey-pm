@@ -22,7 +22,19 @@ pull_modname <- function(fname) {
   paste0(s[1:(ind-1)], collapse = "_")
 }
 
-
+#' Pull outcome from file name 
+#' 
+#' Only tested for files like 'sog-model-data_o-mi-bl_s'21_2022-04-25.rds'
+#' 
+#' @param fname The data file name 
+#' @return A string like "mi-bl" indicating model
+pull_outcome <- function(fname) {
+  # Seasons start with 's' and contain '
+  s <- tools::file_path_sans_ext(basename(fname)) 
+  s <- stringr::str_split(s, "_")[[1]]
+  ind <- which(grepl("o-", s))
+  stringr::str_remove_all(s[ind], "o-")
+}
 
 # Combine player effect and team effect samples with matrix multiplication.
 #
@@ -38,12 +50,11 @@ pull_modname <- function(fname) {
 #' @param player_names Vector of player names 
 #'   
 #' @return A matrix with a column of posterior samples for each player-team combination
-
 get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
   
   #Obtain data frame of posterior samples 
   if (!is.data.frame(pm_fit)) {
-    df_of_draws <- as.data.frame(pm_fit) %>%
+    df_of_draws <- posterior::as_draws_df(pm_fit) %>%
       select(starts_with(c("alfa", "beta")))
   } else {
     df_of_draws = pm_fit
@@ -60,12 +71,12 @@ get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
   p = 1 #Counter for iteration through players
   
   for (team in team_names) {
-    team_players = get_rosters(team, season)$player
+    team_players = hockeyR::get_rosters(team, season)$player
     ms = match(gsub(" ", ".", team_players), player_names)
     
     for (m in ms[!is.na(ms)]) {
       X[c(t, nt+m) , p] = 1
-      colnames(X)[p] = paste(player_names[m],team_names[t], sep=":") 
+      colnames(X)[p] = paste(player_names[m], team_names[t], sep=":") 
       p = p+1
     }  
     t = t+1
