@@ -53,7 +53,7 @@ model <- pull_modname(model_fname)
 
 
 
-```{r}
+```{r, cache=TRUE}
 fit_summary <- summary(pm_fit) #Posterior summary with row for each parameter
 
 #Take columns of data matrix corresponding to offensive parameters 
