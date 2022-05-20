@@ -5,6 +5,7 @@
 
 
 *.Rhistory
+*.Rapp.history
 *.DS_Store
 analysis/ex
 

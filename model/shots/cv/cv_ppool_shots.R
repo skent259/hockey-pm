@@ -21,7 +21,7 @@ options(mc.cores = 4)
 args <- commandArgs(trailingOnly = TRUE)
 print(args)
 
-i <- args[1] 
+i <- as.integer(args[1]) + 1
 cv_spec <- args[2]
 condor <- isTRUE(as.logical(args[3]))
 output_dir <- args[4]

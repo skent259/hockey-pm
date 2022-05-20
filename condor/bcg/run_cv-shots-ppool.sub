@@ -1,0 +1,29 @@
+# Condor submission file for R.
+
+Universe    =   vanilla
+Executable  =   /s/bin/R
+batch_name  =   cv-shots-ppool
+initialdir  =   /ua/spkent/hockey-pm
+input		=   model/shots/cv/cv_ppool_shots.R
+arguments	=   --vanilla --args $(Process) /z/Comp/spkent/hockey-pm/output/cv/cv-spec_2022-05-19.rds TRUE /z/Comp/spkent/hockey-pm/output/cv
+environment =   "PATH=/s/pkg/linux64/gcc/8.3.0/bin:/s/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/s/pkg/linux64/gurobi/gurobi910/linux64/bin:$PATH"
+
+request_cpus = 4
+request_memory = 8GB
+
+# only run 1000/3 = 333 jobs at once 
+concurrency_limits = spkent:3
+
+# -----
+# Send the job to Held state on failure.
+on_exit_hold = (ExitBySignal == True) || (ExitCode != 0)
+ 
+# Periodically retry the jobs every 10 minutes, up to a maximum of 10 retries.
+periodic_release = (NumJobStarts < 20) && ((CurrentTime - EnteredCurrentStatus) > 100)
+# -----
+
+output		=	condor/logs/cv-shots-ppool/out/$(Process).out
+error       =   condor/logs/cv-shots-ppool/err/$(Process).err
+log         =   condor/logs/cv-shots-ppool/log/$(Process).log
+
+queue 40
