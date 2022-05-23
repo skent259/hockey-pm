@@ -208,16 +208,16 @@ mcmc_trace(pm_fit, pars = "sigmap") +
 
 
 ```{r, echo=TRUE}
-
-#Effective sample sizes
-bayesplot::neff_ratio(pm_fit, pars = "mu")
-bayesplot::neff_ratio(pm_fit, pars = "sigmap")
-if (teams_included) {
-  bayesplot::neff_ratio(pm_fit, pars = "alfa_off")
-  bayesplot::neff_ratio(pm_fit, pars = "alfa_def")
-}
-bayesplot::neff_ratio(pm_fit, pars = "beta_off") %>% head()
-bayesplot::neff_ratio(pm_fit, pars = "beta_def") %>% head()
+# 
+# #Effective sample sizes
+# bayesplot::neff_ratio(pm_fit, pars = "mu")
+# bayesplot::neff_ratio(pm_fit, pars = "sigmap")
+# if (teams_included) {
+#   bayesplot::neff_ratio(pm_fit, pars = "alfa_off")
+#   bayesplot::neff_ratio(pm_fit, pars = "alfa_def")
+# }
+# bayesplot::neff_ratio(pm_fit, pars = "beta_off") %>% head()
+# bayesplot::neff_ratio(pm_fit, pars = "beta_def") %>% head()
 
 
 
@@ -227,7 +227,9 @@ example_parameters = c('mu', 'beta_off[1]', 'beta_def[1]', 'sigmap')
 if (teams_included){
   example_parameters = c(example_parameters, 'alfa_off[1]', 'alfa_def[1]')
 }
-fit_summary$summary[example_parameters,"Rhat"]
+fit_summary %>% 
+  filter(variable %in% example_parameters) %>% 
+  select(variable, rhat, ess_bulk, ess_tail)
 
 #plot_rhat_multi(pm_fit, par_list) +
   #patchwork::plot_annotation(title = "Rhat plot")
