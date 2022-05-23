@@ -1,0 +1,107 @@
+---
+title: "Esimates over time"
+author: "Evan Gorstein"
+date: "5/23/2022"
+output: html_document
+---
+
+<style>
+body{
+    font-size: 14pt;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE,
+    cache = FALSE,
+    warning = FALSE,
+    message = FALSE,
+    fig.align = "center"
+)
+
+library(tidyverse)
+library(here)
+library(glue)
+library(rstan)
+library(bayesplot)
+library(posterior)
+library(patchwork)
+library(hockeyR)
+source(here("analysis/utils.R"))
+
+bayesplot::color_scheme_set("red")
+
+```
+
+## Read in models
+```{r}
+mod_paths <- dir_ls(here("model", "shots", "output"), glob = "*.rds")
+mod_paths <- mod_paths[map_dbl(mod_paths, file.size) < 80e6]
+draw_arrays <- map(mod_paths, readRDS)
+```
+
+## Read in data
+
+```{r}
+data_paths <- dir_ls(here("data"), regexp = "sog-model-data_o.*\\.rds$")
+data_paths <- data_paths[map_dbl(data_paths, file.size) < 30e6]
+data_list <- map(data_paths, readRDS)
+```
+
+
+## Shots on goal, no-teams model
+
+```{r}
+#Data for shots on goal
+shgo_model_data = data_list[5:8] 
+names(shgo_model_data) <- map(names(shgo_model_data), pull_seasons)
+
+#Get player names
+get_player_names <- function(model_data, include_goalies = F) {
+  names = model_data@Dimnames[[2]] #All names
+  np = which(names == names[65])[2]-65 #Number of non-goalie players
+  ng = ncol(model_data) - 2*np - 64 #Number of total players
+  
+  if (include_goalies) {
+    names[64+np+1:(np+ng)] #All player names
+  } else {
+    names[64+1:np] #Non-goalie player names 
+  }
+}
+
+ng_player_names = map(shgo_model_data, get_player_names)
+player_names = map(shgo_model_data, get_player_names, include_goalies = T)
+
+
+#Models for shots on goal without teams
+shgo_nt_fit = draw_arrays[9:12]
+names(shgo_nt_fit) <- map(names(shgo_nt_fit), pull_seasons)
+
+#Get ordered vector of median player effects
+get_shgo_nt_med <- function(pm_fit, names, pars) {
+  shgo_nt_int <- mcmc_intervals_data(pm_fit, pars = pars) %>%
+  mutate(name = names) %>%
+  select(name, m) %>%
+  arrange(desc(m))
+}
+
+#Offense
+shgo_nt_med_off <- map2_dfr(shgo_nt_fit, ng_player_names, get_shgo_nt_med,
+                    pars = vars(starts_with("beta_off")), .id = "year")
+
+#Defense
+shgo_nt_med_def <- map2_dfr(shgo_nt_fit, player_names, get_shgo_nt_med,
+                    pars = vars(starts_with("beta_def")), .id = "year")
+
+
+```
+
+```{r}
+top_2018 = shgo_nt_med_off$name[1:30]
+
+ggplot(shgo_nt_med_off, aes(x=year, y=m, group=name)) +
+  geom_line(aes(color = name %in% top_2018, alpha=name %in% top_2018))
+```
+
+
