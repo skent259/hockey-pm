@@ -96,22 +96,24 @@ model {
 }
 
 generated quantities {
+  vector[2*ns] logtime_gq;
   vector[2*ns] team_off;
   vector[2*ns] team_def;
   vector[2*ns] player_off; 
   vector[2*ns] player_def;
   vector[2*ns] log_lambda;
-  real log_lik[2*ns];
+  real test_pred[2*ns];
   
+  logtime_gq = log(time);
   team_off = csr_matrix_times_vector(2*ns, nt, wto, vto, uto, alfa_off); // XTO %*% alpha
   team_def = csr_matrix_times_vector(2*ns, nt, wtd, vtd, utd, alfa_def); // XTD %*% alpha
   player_off = csr_matrix_times_vector(2*ns, np, wpo, vpo, upo, beta_off); // XPO %*% beta_off
   player_def = csr_matrix_times_vector(2*ns, np+ng, wpd, vpd, upd, beta_def); // XPD %*% beta_def
   
-  log_lambda = mu + team_off + team_def + player_off + player_def + logtime;
+  log_lambda = mu + team_off + team_def + player_off + player_def + logtime_gq;
   
   for (i in 1:(2*ns)) {
-    log_lik[i] = poisson_lpmf(y[i] | exp(log_lambda[i]));
+    test_pred[i] = poisson_rng(exp(log_lambda[i]));
   }
   
 }
