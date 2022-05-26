@@ -19,7 +19,9 @@ knitr::opts_chunk$set(
     message = FALSE,
     fig.align = "center"
 )
-
+library(plotly)
+library(scales)
+library(corrr)
 library(tidyverse)
 library(here)
 library(glue)
@@ -28,34 +30,28 @@ library(bayesplot)
 library(posterior)
 library(patchwork)
 library(hockeyR)
+library(fs)
 source(here("analysis/utils.R"))
 
 bayesplot::color_scheme_set("red")
 
 ```
 
-## Read in models
-```{r}
+
+```{r reading-in}
+#Models
 mod_paths <- dir_ls(here("model", "shots", "output"), glob = "*.rds")
 mod_paths <- mod_paths[map_dbl(mod_paths, file.size) < 80e6]
 draw_arrays <- map(mod_paths, readRDS)
-```
 
-## Read in data
-
-```{r}
+#Data Sets
 data_paths <- dir_ls(here("data"), regexp = "sog-model-data_o.*\\.rds$")
 data_paths <- data_paths[map_dbl(data_paths, file.size) < 30e6]
 data_list <- map(data_paths, readRDS)
 ```
 
 
-## Shots on goal, no-teams model
-
-```{r}
-#Data for shots on goal
-shgo_model_data = data_list[5:8] 
-names(shgo_model_data) <- map(names(shgo_model_data), pull_seasons)
+```{r functions}
 
 #Get player names
 get_player_names <- function(model_data, include_goalies = F) {
@@ -70,38 +66,175 @@ get_player_names <- function(model_data, include_goalies = F) {
   }
 }
 
+#Get team names 
+get_team_names <- function(model_data) {
+  names = model_data@Dimnames[[2]] #All names
+  team_names <- names[seq(3, 63, by=2)] %>%
+  str_sub(start=1, end=3)
+}
+
+
+#Get ordered vector of median player effects
+get_shgo_med <- function(pm_fit, names, pars) {
+  mcmc_intervals_data(pm_fit, pars = pars) %>%
+    mutate(name = names) %>%
+    select(name, m) %>%
+    arrange(desc(m))
+}
+
+#Plot player effects over time
+plot_over_time <- function(df, title) {
+  top_2018 = df$name[1:30]
+  top_2021 = filter(df, year==2021)$name[1:30]
+  top_both = intersect(top_2018, top_2021)
+
+  df %>%
+    mutate(label = case_when(
+      name %in% top_both ~ "Top in both '18 and '21",
+      name %in% top_2018 ~ "Top in '18",
+      name %in% top_2021 ~ "Top in '21",
+      TRUE ~ "All else"
+    )) %>%
+    mutate(text = glue(
+        "{name} 
+        posterior median: {number(m, 0.001)}
+        year: {year}"
+      )) %>%
+    ggplot(aes(x=year, y=m, group=name, text = text)) +
+    geom_line(aes(alpha = label, color=label)) +
+    scale_color_discrete(name="") +
+    scale_alpha_discrete(range=c(.02, .6), name="") +
+    theme_minimal() +
+    labs(
+      x = "Season",
+      y = "Effect posterior median",
+      title = title
+    )
+}
+
+
+
+#Plot team effects over time
+plot_team_over_time <- function(df, title) {
+   df %>%
+    mutate(text = glue(
+        "{name} 
+        posterior median: {number(m, 0.001)}
+        year: {year}"
+      )) %>%
+    ggplot(aes(x=year, y=m, group=name, text = text)) +
+    geom_line(alpha = .4, color="grey") +
+    theme_minimal() +
+    labs(
+      x = "Season",
+      y = "Effect posterior median",
+      title = title
+    )
+}
+```
+
+## Shots on goal, no-teams model
+
+```{r, cache=T}
+#Data for shots on goal
+shgo_model_data = data_list[5:8] 
+names(shgo_model_data) <- map(names(shgo_model_data), pull_seasons)
+
+#Player names
 ng_player_names = map(shgo_model_data, get_player_names)
 player_names = map(shgo_model_data, get_player_names, include_goalies = T)
 
+#Team names
+team_names = map(shgo_model_data, get_team_names)
 
 #Models for shots on goal without teams
-shgo_nt_fit = draw_arrays[9:12]
-names(shgo_nt_fit) <- map(names(shgo_nt_fit), pull_seasons)
+shgo_fit = draw_arrays[9:12]
+names(shgo_fit) <- map(names(shgo_fit), pull_seasons)
 
-#Get ordered vector of median player effects
-get_shgo_nt_med <- function(pm_fit, names, pars) {
-  shgo_nt_int <- mcmc_intervals_data(pm_fit, pars = pars) %>%
-  mutate(name = names) %>%
-  select(name, m) %>%
-  arrange(desc(m))
-}
+#Create df with median offensive effects over all four years
+shgo_med_off <- map2_dfr(shgo_fit, ng_player_names, get_shgo_med, pars = vars(starts_with("beta_off")), .id = "year") %>%
+  mutate(year = as.numeric(str_replace(year, "s'", "20")))
 
-#Offense
-shgo_nt_med_off <- map2_dfr(shgo_nt_fit, ng_player_names, get_shgo_nt_med,
-                    pars = vars(starts_with("beta_off")), .id = "year")
+#Create df with median defensive effect over all four years
+shgo_med_def <- map2_dfr(shgo_fit, player_names, get_shgo_med, pars = vars(starts_with("beta_def")), .id = "year") %>%
+  mutate(year = as.numeric(str_replace(year, "s'", "20")))
 
-#Defense
-shgo_nt_med_def <- map2_dfr(shgo_nt_fit, player_names, get_shgo_nt_med,
-                    pars = vars(starts_with("beta_def")), .id = "year")
-
+plot_over_time(shgo_med_off, "Offensive Effects") %>% ggplotly(tooltip = "text")
+plot_over_time(shgo_med_def, "Defensive Effects") %>% ggplotly(tooltip = "text")
 
 ```
+
+
+## Shots on goal, teams-included model
+
+```{r, cache=TRUE}
+
+#Models for shots on goal with teams included
+shgo_fit = draw_arrays[13:16]
+names(shgo_fit) <- map(names(shgo_fit), pull_seasons)
+
+#Create df with median offensive player effects over all four years
+shgo_med_off_wt <- map2_dfr(shgo_fit, ng_player_names, get_shgo_med, pars = vars(starts_with("beta_off")), .id = "year") %>%
+  mutate(year = as.numeric(str_replace(year, "s'", "20")))
+
+#Create df with median defensive player effect over all four years
+shgo_med_def_wt <- map2_dfr(shgo_fit, player_names, get_shgo_med, pars = vars(starts_with("beta_def")), .id = "year") %>%
+  mutate(year = as.numeric(str_replace(year, "s'", "20")))
+
+#Create df with median offensive team effect over all four years
+shgo_med_team_off <- map2_dfr(shgo_fit, team_names, get_shgo_med, pars = vars(starts_with("alfa_off")), .id = "year") %>%
+  mutate(year = as.numeric(str_replace(year, "s'", "20")))
+
+#Create df with median defensive team effect over all four years
+shgo_med_team_def <- map2_dfr(shgo_fit, team_names, get_shgo_med, pars = vars(starts_with("alfa_def")), .id = "year") %>%
+  mutate(year = as.numeric(str_replace(year, "s'", "20")))
+
+
+plot_over_time(shgo_med_off_wt, "Player Offensive Effects") %>%
+  ggplotly(tooltip = "text")
+plot_over_time(shgo_med_def_wt, "Player Defensive Effects") %>%
+  ggplotly(tooltip = "text")
+plot_team_over_time(shgo_med_team_off, "Team Offensive Effects") %>%
+  ggplotly(tooltip = "text")
+plot_team_over_time(shgo_med_team_def, "Team Defensive Effects") %>%
+  ggplotly(tooltip = "text")
+  
+
+```
+
+
+## Between season correlations
+
+### Shots on goal, no-team model
+```{r}
+wide_off = pivot_wider(shgo_med_off, id_cols=name, names_from = year, values_from = m)
+wide_def = pivot_wider(shgo_med_def, id_cols=name, names_from = year, values_from = m)
+wide = inner_join(wide_off, wide_def, by="name", suffix = c(".off", ".def"))
+correlate(wide[,-1]) %>% 
+  shave() %>%
+  print(n=8, width=Inf)
+  
+```
+
+### Shots on goal, teams-included model
 
 ```{r}
-top_2018 = shgo_nt_med_off$name[1:30]
+wide_off = pivot_wider(shgo_med_off_wt, id_cols=name, names_from = year, values_from = m)
+wide_def = pivot_wider(shgo_med_def_wt, id_cols=name, names_from = year, values_from = m)
+wide = inner_join(wide_off, wide_def, by="name", suffix = c(".off", ".def"))
+correlate(wide[,-1]) %>% 
+  shave() %>%
+  print(n=8, width=Inf)
 
-ggplot(shgo_nt_med_off, aes(x=year, y=m, group=name)) +
-  geom_line(aes(color = name %in% top_2018, alpha=name %in% top_2018))
 ```
+
+There's more correlation between the offensive effects in different years than between the defensive effects. 
+
+
+
+
+
+
+
 
 
