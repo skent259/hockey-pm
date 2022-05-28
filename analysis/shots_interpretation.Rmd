@@ -1,0 +1,131 @@
+---
+title: "Interpretation"
+author: "Evan Gorstein"
+date: "5/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE,
+    cache = FALSE,
+    warning = FALSE,
+    message = FALSE,
+    fig.align = "center"
+)
+
+library(tidyverse)
+library(here)
+library(glue)
+library(rstan)
+library(bayesplot)
+library(patchwork)
+library(plotly)
+library(scales)
+library(knitr)
+library(kableExtra)
+source(here("analysis/utils.R"))
+
+bayesplot::color_scheme_set("red")
+
+# Tables
+kable_standard <- function(...) {
+    kable(booktabs = TRUE, linesep = "", ...) %>% 
+        kable_styling(full_width = FALSE)
+}
+
+options(knitr.kable.NA = '')
+
+```
+
+
+
+```{r}
+#Pull in model
+mod_dir <- "model/shots/output"
+model_fname <- "ppool_sh-go_nt_s'21_2022-05-09.rds"
+pm_fit <- readRDS(here(mod_dir,model_fname))
+
+#Pull in data
+data_dir <- "data"
+data_fname <- "sog-model-data_o-sh-go_s'21_2022-04-25.rds"
+model_data <- readRDS(here(data_dir, data_fname))
+
+
+names = model_data@Dimnames[[2]]
+team_names <- names[seq(3, 63, by=2)] %>%
+  str_sub(start=1, end=3)
+
+np = which(names == names[65])[2]-65 #Number of non-goalie players
+ng = ncol(model_data) - 2*np - 64 #Number of total players
+ng_player_names <- names[64+1:np] #Non-goalie player names 
+player_names <-  names[64+np+1:(np+ng)]
+model <- pull_modname(model_fname)
+```
+
+We interpret the effects in the shots-on-goal model without teams for the 2020-2021 season. 
+
+Model: `r model_fname`  
+Data: `r data_fname`
+
+The sampling model is $y \sim \text{Pois}(\lambda)$, where 
+
+\begin{align}
+\lambda &= \exp\{\mu + \beta^{off}_{1} + \ldots + \beta^{off}_{5} - \beta^{def}_{1} - \ldots - \beta^{def}_{5} - \beta^{def}_{6} + \log(t)\} \\
+&= \exp\{\beta^{off}_{1}\}*\exp\{\mu + \beta^{off}_{2} + \ldots + \beta^{off}_{5} - \beta^{def}_{1} - \ldots - \beta^{def}_{5} - \beta^{def}_{6} + \log(t)\}
+\end{align}
+
+We see that player 1 of the offense being on the ice produces a multiplicative effect of $\exp(\beta^{off}_{1})$ on the expected value of their team's shots on goal during the shift. Here is the posterior distribution for this effect for Alex Ovechkin
+
+```{r}
+alex_index = which(player_names == "Alex.Ovechkin") %>% as.character()
+alex_draws = extract(pm_fit, pars = paste0("beta_off[", alex_index, "]")) %>% unlist()
+mult_effect = exp(alex_draws)
+hist(mult_effect, main = "Posterior distribution of multiplicative effect\n for Alex Ovechkin")
+```
+
+The player with the largest posterior mean effect was Connor McDavid.  
+
+```{r}
+connor_index = which(player_names == "Connor.McDavid") %>%
+  as.character()
+connor_draws = extract(pm_fit, pars = paste0("beta_off[", connor_index, "]")) %>%
+  unlist()
+mult_effect = exp(connor_draws)
+hist(mult_effect, main = "Posterior distribution of multiplicative effect\n for Connor McDavid")
+```
+
+Let's suppose the Oilers are playing forwards Jesse Puljujarvi, Ryan Nugent-Hopkins and defensemen Tyson Barrie and Darnell Nurse (see [historical line-up combinations](https://frozenpool.dobbersports.com/frozenpool_linecombo.php?select=TF&games=2020-2021%3AR%3A99&period=ALL&situation=EV)) against a team with completely average defense. If we consider a shift lasting 13s, the mean in our data set, we can find the posterior distribution of the expected number of shots on goal for the Oilers during a shift with Connor McDavid included in the line-up versus a shift with McDavid replaced by a completely average offensive player.
+
+```{r}
+mu_draws <- extract(pm_fit, pars ="mu") %>% unlist()
+oiler_players = c("Jesse.Puljujarvi" , "Ryan.Nugent.Hopkins", "Tyson.Barrie", "Darnell.Nurse")
+oiler_indices = which(player_names %in% oiler_players) %>% 
+  as.character()
+oiler_pars = paste0("beta_off[", oiler_indices, "]")
+draws = extract(pm_fit, pars = oiler_pars) %>% 
+  data.frame() %>%
+  mutate(mu_draws = mu_draws, logt = log(13), connor_draws=connor_draws) %>%
+  mutate(wo_connor = exp(mu_draws + beta_off.24. + beta_off.31. + 
+           beta_off.634. + beta_off.813. + logt), 
+         wt_connor = wo_connor*exp(connor_draws))
+  
+ggplot(draws) +
+  labs(x = "Expected shots on goal", fill="Line-up") +
+  geom_histogram(aes(x = wo_connor, fill = "With Average Player"), alpha =.2, color="black") +
+  geom_histogram(aes(x = wt_connor, fill = "With McDavid"), alpha =.2, color= "black") +
+  scale_fill_manual(values = c("red","blue")) 
+
+```
+
+
+
+
+
+
+
+
+
+
+
+

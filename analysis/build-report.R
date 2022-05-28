@@ -11,8 +11,8 @@ source(here("analysis/utils.R"))
 
 ## Change these parameters ----------------------------------------------------#
 
-# model_fname <- "ppool_mi-bl_s'18_2022-05-20.rds"
-# data_fname <- "sog-model-data_o-sh-go_s'18_2022-05-03.rds"
+#model_fname <- "ppool_mi-bl_s'18_2022-05-20.rds"
+#data_fname <- "sog-model-data_o-sh-go_s'18_2022-05-03.rds"
 out_dir <- "analysis/reports"
 
 params <- tibble::tribble(
