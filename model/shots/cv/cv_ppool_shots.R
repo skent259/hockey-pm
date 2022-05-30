@@ -98,10 +98,12 @@ datalist_test <- make_datalist_ppool_shots(d_test, outcome, team)
 pm_mod <- cmdstanr::cmdstan_model(model_file)
 gq <- pm_mod$generate_quantities(draws, data = datalist_test)
 
-gq_summary <- gq$summary(variables = "test_pred",
-                         mean, 
-                         sd, 
-                         ~my_quantile(.x, probs = c(0.025, 0.05, 0.25, 0.50, 0.75, 0.95, 0.975)))
+gq_summary <- gq$summary(
+  variables = "test_pred",
+  mean, 
+  sd, 
+  ~my_quantile(.x, probs = c(0.025, 0.05, 0.25, 0.50, 0.75, 0.95, 0.975))
+)
 
 # join as list column in cv_spec, save the cv_spec row 
 cv_spec_i <-

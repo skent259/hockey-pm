@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # start from ~/condor
+cd condor 
 
 ## run_shots-ppool.sub -----------------------------------#
 
