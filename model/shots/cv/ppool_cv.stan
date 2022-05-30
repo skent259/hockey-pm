@@ -99,7 +99,7 @@ generated quantities {
   vector[2*ns] logtime_gq;
   vector[2*ns] team_off;
   vector[2*ns] team_def;
-  vector[2*ns] player_off; 
+  vector[2*ns] player_off;
   vector[2*ns] player_def;
   vector[2*ns] log_lambda;
   real test_pred[2*ns];

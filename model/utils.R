@@ -1,3 +1,10 @@
+#' `quantile()` with better naming
+my_quantile <- function(x, probs, ...) {
+  q <- quantile(x, probs, ...)
+  names(q) <- paste0("q", gsub("%", "", names(q)))
+  q
+}
+
 #' Set up STAN data (ppool_shots)
 #' 
 #' @param d Data frame with design matrix. Should be the output of
