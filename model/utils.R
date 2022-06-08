@@ -1,3 +1,8 @@
+#' Set defaults for interactive session 
+set_default <- function(.x, val) { 
+  if (is.na(.x)) val else .x 
+}
+
 #' `quantile()` with better naming
 my_quantile <- function(x, probs, ...) {
   q <- quantile(x, probs, ...)

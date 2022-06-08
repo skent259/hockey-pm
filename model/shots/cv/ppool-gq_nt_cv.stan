@@ -44,30 +44,24 @@ transformed parameters {
   real<lower=0> sigmap = sqrt(sigmap_squared);
 }
 
-model {
-  vector[2*ns] player_off; 
-  vector[2*ns] player_def;
-  vector[2*ns] log_lambda;
-  
-  //Layer 1
-  sigmap_squared ~ inv_gamma(s, r);
-  
-  //Layer 2
-  mu ~ normal(meanint, sigmaint);
-  beta_off ~ normal(0, sigmap);
-  beta_def ~ normal(0, sigmap);
-  
-  //Layer 3
-  //Perform sparse matrix-vector multiplication: see https://mc-stan.org/docs/2_29/functions-reference/sparse-matrix-arithmetic.html
-  
-  player_off = csr_matrix_times_vector(2*ns, np, wpo, vpo, upo, beta_off); // XPO %*% beta_off
-  player_def = csr_matrix_times_vector(2*ns, np+ng, wpd, vpd, upd, beta_def); // XPD %*% beta_def
-  
-  log_lambda = mu + player_off + player_def + logtime; //mu automatically gets broadcasted into vector
-  y ~ poisson_log(log_lambda);
-  
+generated quantities {
+  real test_pred[2*ns];
+  {
+    // Variables in nested block are local, don't get output: 
+    // see https://mc-stan.org/docs/2_29/reference-manual/program-block-generated-quantities.html
+    vector[2*ns] logtime_gq;
+    vector[2*ns] player_off; 
+    vector[2*ns] player_def;
+    vector[2*ns] log_lambda;
+    
+    player_off = csr_matrix_times_vector(2*ns, np, wpo, vpo, upo, beta_off); // XPO %*% beta_off
+    player_def = csr_matrix_times_vector(2*ns, np+ng, wpd, vpd, upd, beta_def); // XPD %*% beta_def
+    
+    log_lambda = mu + player_off + player_def + logtime;
+    
+    for (i in 1:(2*ns)) {
+      test_pred[i] = poisson_rng(exp(log_lambda[i]));
+    }  
+  }
 }
-
-
-
 

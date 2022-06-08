@@ -21,19 +21,14 @@ options(mc.cores = 4)
 args <- commandArgs(trailingOnly = TRUE)
 print(args)
 
-i <- as.integer(args[1]) + 1
-cv_spec <- args[2]
-condor <- isTRUE(as.logical(args[3]))
-output_dir <- args[4]
-
-#' Set defaults for interactive session 
-set_default <- function(.x, val) { 
-  if (is.na(.x)) val else .x 
-}
+i <- as.integer(args[1]) + 1 
 i <- set_default(i, 1)
-cv_spec <- set_default(cv_spec, "model/shots/cv/cv-spec_2022-05-19.rds")
-condor <- set_default(condor, FALSE)
-output_dir <- set_default(output_dir, "model/shots/cv/output")
+cv_spec <- args[2] %>% 
+  set_default("model/shots/cv/cv-spec_2022-05-19.rds")
+condor <- isTRUE(as.logical(args[3])) %>% 
+  set_default(FALSE)
+output_dir <- args[4] %>% 
+  set_default("model/shots/cv/output")
 
 print(list(i = i, cv_spec = cv_spec, condor = condor, output_dir = output_dir))
 
@@ -95,8 +90,11 @@ if (!file.exists(here(output_dir, output_fname))) {
 ## Get predictions on testing data --------------------------------------------#
 datalist_test <- make_datalist_ppool_shots(d_test, outcome, team)
 
-pm_mod <- cmdstanr::cmdstan_model(model_file)
-gq <- pm_mod$generate_quantities(draws, data = datalist_test)
+model_file <- ifelse(team, "ppool-gq_cv.stan", "ppool-gq_nt_cv.stan")
+model_file <- here("model/shots/cv", model_file)
+gq_mod <- cmdstanr::cmdstan_model(model_file)
+  
+gq <- gq_mod$generate_quantities(draws, data = datalist_test)
 
 gq_summary <- gq$summary(
   variables = "test_pred",
