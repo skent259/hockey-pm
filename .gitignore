@@ -13,8 +13,9 @@ analysis/ex
 
 notes.rtf
 
-data/shifts_eda_cache/
-data/shifts_eda_files/
+*_cache/
+/cache/
+*_files/
 
 condor/logs/*
 .bash_history
