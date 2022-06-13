@@ -103,7 +103,6 @@ plot_over_time <- function(df, title) {
     ggplot(aes(x=year, y=m, group=name, text = text)) +
     geom_line(aes(alpha = label, color=label)) +
     scale_color_discrete(name="") +
-    scale_alpha_discrete(range=c(.02, .6), name="") +
     theme_minimal() +
     labs(
       x = "Season",
