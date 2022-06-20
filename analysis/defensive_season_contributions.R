@@ -88,7 +88,7 @@ form_post <- function(shift_no) {
   m = matrix(0, nrow = 4000, ncol = 5)
   
   for (i in 6:10) {
-    Z_med = Z - pull(defense_draws, players$player_index[i]-np) + pull(defense_draws, -1)
+    Z_med = Z + pull(defense_draws, players$player_index[i]-np) - pull(defense_draws, -1)
     m[,i-5] = exp(Z_med) - exp(Z) 
   }
   
@@ -104,5 +104,5 @@ for (j in 1:nr){
 } 
 
 
-matrix_fname <- glue::glue("def_{outcome}_{nt}_{seasons}_{lubridate::today()}.rds")
+matrix_fname <- glue::glue("def_{outcome}_{nt}_{seasons}_{lubridate::today()}_2.rds")
 saveRDS(season_cont, here("analysis", "output", matrix_fname))
