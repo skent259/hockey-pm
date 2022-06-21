@@ -9,7 +9,8 @@ arguments	=   --vanilla --args $(Process) /z/Comp/spkent/hockey-pm/output/cv/cv-
 environment =   "PATH=/s/pkg/linux64/gcc/8.3.0/bin:/s/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/s/pkg/linux64/gurobi/gurobi910/linux64/bin:$PATH"
 
 request_cpus = 4
-request_memory = 8GB
+request_memory = 16GB
+request_disk = 16GB
 
 # only run 1000/3 = 333 jobs at once 
 concurrency_limits = spkent:3
