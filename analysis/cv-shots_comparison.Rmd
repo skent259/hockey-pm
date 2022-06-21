@@ -1,0 +1,355 @@
+---
+title: "Comparing teams to no teams models through CV"
+author: "Sean Kent"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = FALSE,
+    cache = FALSE,
+    warning = FALSE,
+    message = FALSE,
+    fig.align = "center"
+)
+
+library(tidyverse)
+library(here)
+library(glue)
+library(rstan)
+library(bayesplot)
+library(posterior)
+library(patchwork)
+library(plotly)
+library(pheatmap)
+library(RColorBrewer)
+library(scales)
+library(Matrix)
+library(knitr)
+library(kableExtra)
+source(here("analysis/utils.R"))
+
+bayesplot::color_scheme_set("red")
+ggplot2::theme_set(theme_minimal())
+
+# Tables
+kable_standard <- function(...) {
+    kable(booktabs = TRUE, linesep = "", ...) %>% 
+        kable_styling(full_width = FALSE)
+}
+
+options(knitr.kable.NA = '')
+
+```
+
+<style>
+body{
+    font-size: 14pt;
+}
+</style>
+
+## Summary
+
+On measures of predictive capability including RMSE and an Interval Score, the models without team effects are extremely similar to models with team effects. This result is consistent for both outcomes: missed + blocked shots, and shots + goals for the 2021 season. Looking at the average coverage of posterior predictive values, the intervals have higher coverage relative to the significance level and this seems to be due to the small numeric range of predicted values; most are predicted as 0 or 1. 
+
+
+```{r}
+#Pull in CV results
+mod_dir <- "model/shots/cv/output"
+results_fname <- "cv-ppool-gq-results.rds"
+results <- readRDS(here(mod_dir, results_fname))
+
+
+
+# Add true outcomes as list column
+get_outcome <- function(d_fname, rows) {
+  d <- readRDS(here(d_fname))
+  d[rows, "y"]
+}
+results <- results %>% 
+  mutate(
+    y_true = map2(d_fname, out_id, ~get_outcome(.x, .y))
+  )
+
+results_long <- results %>% 
+  rowwise() %>% 
+  mutate(
+    gq_summary = list(gq_summary %>% mutate(y_true = y_true))
+  ) %>% 
+  select(-y_true) %>% 
+  ungroup() %>% 
+  unnest(gq_summary)
+
+```
+
+## Models 
+
+We have 4 different models, each run with 10-fold cross validation to generate a predictive model on 90\% of the data and generated predictions on the held-out 10\%.  
+
+The 4 models are:
+
+- missed and blocked shots outcome; no team effects
+- missed and blocked shots outcome; team effects
+- shots and goals outcome; no team effects
+- shots and goals outcome; team effects
+
+We compare the team effects model to the no team effect model for both outcome options. 
+
+## Calculate RMSE of each model
+
+$$
+\textrm{RMSE} = \sqrt{\sum_{i = 1}^N \left(y_i - \hat{y}_i\right)^2}
+$$
+
+where $i$ counts over the values in all folds, i.e. across all rows of the original data set before splitting. We let $y_i$ reference the true outcome and $\hat{y}_i$ reference the posterior mean predicted value across the 4000 samples (1000 iterations in 4 chains)
+
+```{r}
+
+rmse <- function(x, y) {
+  stopifnot(length(x) == length(y))
+  sqrt(sum((x - y)^2) / length(x)) 
+}
+
+results %>% 
+  group_by(d_fname, team, outcome, season) %>% 
+  summarize(
+    y_post_mean = list(unlist(map(gq_summary, "mean"))),
+    y_true = list(unlist(y_true)),
+    RMSE = map2_dbl(y_post_mean, y_true, ~rmse(.x, .y)),
+    .groups = "drop"
+  ) %>% 
+  arrange(outcome, team) %>% 
+  select(team, outcome, season, RMSE) %>% 
+  kable_standard(
+    col.names = c("Teams?", "Outcome", "Season", "RMSE"),
+    digits = 4
+  )
+
+```
+
+
+```{r}
+results %>% 
+  mutate(
+    y_post_mean = map(gq_summary, "mean"),
+    RMSE = map2_dbl(y_post_mean, y_true, ~rmse(.x, .y))
+  ) %>% 
+  ggplot(aes(team, RMSE)) + 
+  geom_point() +
+  geom_line(aes(group = glue("{outcome}, {season}, {fold}"))) + 
+  facet_wrap(~outcome, scales = "free", labeller = label_both) +
+  scale_x_discrete(limits = c(FALSE, TRUE),
+                   labels = c("No", "Yes")) + 
+  labs(
+    x = "Team effects included?",
+    title = "Fold-by-fold comparison of RMSE"
+  ) +
+  theme_bw()
+```
+
+RMSE is almost identical whether team effects are included or not. Fold variation is much larger than model variation. 
+
+```{r}
+results %>% 
+  mutate(
+    y_post_mean = map(gq_summary, "mean"),
+    RMSE = map2_dbl(y_post_mean, y_true, ~rmse(.x, .y))
+  ) %>% 
+  nest_by(outcome, season) %>% 
+  summarize(
+    t_test = list(t.test(RMSE ~ team, data = data)),
+    broom::tidy(t_test)
+  ) %>% 
+  select(outcome, season, estimate1, estimate2, p.value) %>% 
+  kable_standard(
+    caption = "Fold-wise t-test comparison of RMSE",
+    col.names = c("Outcome", "Season", "Mean of no teams", "Mean of teams", "P-value"),
+    digits = 5
+  )
+  
+```
+
+
+<!-- ```{r} -->
+<!-- results_long %>%  -->
+<!--   group_by(team, outcome, season) %>%  -->
+<!--   summarize( -->
+<!--     RMSE_med = rmse(y_true, q50) -->
+<!--   ) %>%  -->
+<!--   arrange(outcome, team)  -->
+<!-- ``` -->
+
+
+## Compare coverage of models 
+
+Coverage is defined by what fraction of test data rows have $y_i$ fall within the posterior predictive interval with level $\alpha$. For this analysis, we use $\alpha =$ 0.05, 0.10, 0.50 for 95\%, 90\%, and 50\% intervals, respectively.  
+
+
+```{r}
+.coverage <- function(y, lb, ub, ends = TRUE) {
+  if (ends) {
+    mean(y >= lb & y <= ub)
+  } else {
+    mean(y > lb & y < ub)
+  }
+}
+
+results_long %>% 
+  group_by(team, outcome, season) %>% 
+  summarize(
+    coverage_95 = .coverage(y_true, lb = q2.5, ub = q97.5),
+    coverage_90 = .coverage(y_true, lb = q5, ub = q95),
+    coverage_50 = .coverage(y_true, lb = q25, ub = q75),
+    across(starts_with("coverage"), ~percent(.x, accuracy = 0.01))
+  ) %>% 
+  arrange(outcome, team) %>% 
+  kable_standard(
+    caption = "Coverage (including endpoints)",
+    col.names = c("Team?", "Outcome", "Season", "95%", "90%", "50%"),
+    align = "lllrrr"
+  ) %>% 
+  add_header_above(c(" " = 3, "Coverage" = 3))
+
+```
+
+
+
+## Problems 
+
+The outcomes are usually small integer values, which I think causes issues for the coverage
+
+```{r}
+results_long %>% 
+  filter(team == TRUE) %>%
+  ggplot(aes(y_true, fill = outcome)) +
+  geom_bar(stat = "count") + 
+  geom_text(aes(label = number(after_stat(count), 1, big.mark = ",")), 
+            size = 2.5, 
+            color = "grey30", 
+            stat = "count",
+            vjust = -0.5) +
+  facet_wrap(~ outcome, labeller = label_both) +
+  scale_x_continuous(n.breaks = 7) + 
+  # scale_x_discrete(limits = factor(0:6)) + 
+  scale_y_continuous(expand = c(0, 0, 0.1, 0)) +
+  theme_bw() +
+  labs(
+    x = "True outcome",
+    y = "Count",
+    title = "Histogram of true outcomes"
+  )
+```
+
+```{r}
+results_long %>% 
+  # filter(team == TRUE) %>%
+  ggplot(aes(q50, fill = outcome)) +
+  geom_bar(stat = "count") + 
+  geom_text(aes(label = number(after_stat(count), 1, big.mark = ",")), 
+            size = 2.5, 
+            color = "grey30", 
+            stat = "count",
+            vjust = -0.5) +
+  facet_wrap(~ outcome + team, labeller = label_both) +
+  scale_x_continuous(breaks = c(0, 0.5, 1)) +
+  scale_y_continuous(expand = c(0, 0, 0.1, 0)) +
+  theme_bw() +
+  labs(
+    x = "Posterior median",
+    y = "Count",
+    title = "Histogram of posterior median"
+  )
+
+results_long %>% 
+  ggplot(aes(q95, fill = outcome)) +
+  geom_bar(stat = "count") + 
+  geom_text(aes(label = number(after_stat(count), 1, big.mark = ",")), 
+            size = 2.5, 
+            color = "grey30", 
+            stat = "count",
+            vjust = -0.5) +
+  facet_wrap(~ outcome + team, labeller = label_both) +
+  # scale_x_discrete() + 
+  scale_x_continuous(breaks = 0:4) +
+  scale_y_continuous(expand = c(0, 0, 0.1, 0)) +
+  theme_bw() +
+  labs(
+    x = "Posterior 95th percentile",
+    y = "Count",
+    title = "Histogram of posterior 95th percentile"
+  )
+
+results_long %>% 
+  count(q95)
+```
+
+
+## Interval score 
+
+The interval score from Brehmer and Gneiting (2021) is given by 
+
+$$
+\operatorname{IS}_{\alpha}([a, b], y):=(b-a)+\frac{2}{\alpha}(a-y) \mathbb{1}(y<a)+\frac{2}{\alpha}(y-b) \mathbb{1}(y>b)
+$$
+
+where $[a, b]$ is the interval, $y$ is the true value, and $\alpha$ denotes the level of significance. In consideration of the posterior predictive distribution, we average this interval score across rows of data.
+
+
+```{r}
+.int_score <- function(y, a, b, alpha) {
+  out <- (b - a) + (2/alpha) * (a - y) * 1*(y < a) + (2/alpha) * (y - b) * 1*(y > b)
+  mean(out)
+}
+
+results_long %>% 
+  group_by(team, outcome, season) %>% 
+  summarize(
+    is_95 = .int_score(y_true, q2.5, q97.5, alpha = 0.05),
+    is_90 = .int_score(y_true, q5, q95, alpha = 0.10),
+    is_50 = .int_score(y_true, q25, q75, alpha = 0.50)
+  ) %>% 
+  arrange(outcome, team) %>% 
+  kable_standard(
+    caption = "Average interval score from all data",
+    col.names = c("Team?", "Outcome", "Season", "95%", "90%", "50%"),
+    align = "lllrrr",
+    digits = 3
+  ) %>%
+  add_header_above(c(" " = 3, "Interval Score" = 3))
+```
+
+
+```{r}
+.int_score_vec <- function(y, a, b, alpha) {
+  (b - a) + (2/alpha) * (a - y) * 1*(y < a) + (2/alpha) * (y - b) * 1*(y > b)
+}
+
+results_long %>% 
+  group_by(rep, fold, team, outcome, season) %>% 
+  summarize(
+    is_95 = .int_score(y_true, q2.5, q97.5, alpha = 0.05),
+    is_90 = .int_score(y_true, q5, q95, alpha = 0.10),
+    is_50 = .int_score(y_true, q25, q75, alpha = 0.50)
+  ) %>% 
+  ungroup() %>% 
+  nest_by(outcome, season) %>% 
+  summarize(
+    t_test_95 = list(t.test(is_95 ~ team, data = data)),
+    t_test_90 = list(t.test(is_90 ~ team, data = data)),
+    t_test_50 = list(t.test(is_50 ~ team, data = data)),
+    across(starts_with("t_test"),
+           list("p" = ~pvalue(.x$p.value)), 
+           .names = "{.fn}_{.col}")
+  ) %>% 
+  select(outcome, season, starts_with("p")) %>% 
+  kable_standard(
+    caption = "Fold-wise t-test comparison of interval score",
+    col.names = c("Outcome", "Season", "95%", "90%", "50%"),
+    digits = 5
+  ) %>% 
+  add_header_above(c(" " = 2, "P-value" = 3))
+  
+```
+
+Any difference in interval score is minimal between the models
