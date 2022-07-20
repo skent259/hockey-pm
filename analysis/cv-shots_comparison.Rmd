@@ -53,6 +53,7 @@ body{
 
 On measures of predictive capability including RMSE and an Interval Score, the models without team effects are extremely similar to models with team effects. This result is consistent for both outcomes: missed + blocked shots, and shots + goals for the 2021 season. Looking at the average coverage of posterior predictive values, the intervals have higher coverage relative to the significance level and this seems to be due to the small numeric range of predicted values; most are predicted as 0 or 1. 
 
+In addition to showing similar performance, the linear combinations of predictors and parameters in the model are similar between the teams and no teams model. Correlations between the two are over 0.999 for both outcomes on the 2021 season data. 
 
 ```{r}
 #Pull in CV results
@@ -353,3 +354,88 @@ results_long %>%
 ```
 
 Any difference in interval score is minimal between the models
+
+
+## Raw log lambda comparison
+
+Given how similar the predictions are, it is worth checking whether the linear combination of parameters (log lambda) are close between models as well.
+
+
+```{r}
+#Pull in CV results
+mod_dir <- "model/shots/cv/output"
+results_fname <- "cv-ppool-raw-gq-results.rds"
+raw_results <- readRDS(here(mod_dir, results_fname))
+
+
+# 
+# # Add true outcomes as list column
+# get_outcome <- function(d_fname, rows) {
+#   d <- readRDS(here(d_fname))
+#   d[rows, "y"]
+# }
+# results <- results %>% 
+#   mutate(
+#     y_true = map2(d_fname, out_id, ~get_outcome(.x, .y))
+#   )
+
+results_long <- results %>% 
+  rowwise() %>% 
+  mutate(
+    gq_summary = list(gq_summary %>% mutate(y_true = y_true))
+  ) %>% 
+  select(-y_true) %>% 
+  ungroup() %>% 
+  unnest(gq_summary)
+
+```
+
+
+```{r}
+
+# compare teams to no teams 
+raw_results %>% 
+  pivot_wider(names_from = team, 
+              names_prefix = "team_", 
+              values_from = gs_summary) %>% 
+  group_by(d_fname, outcome, season) %>% 
+  summarize(
+    across(c(team_TRUE, team_FALSE), ~list(unlist(map(.x, "mean")))),
+    cor = map2_dbl(team_TRUE, team_FALSE, ~cor(.x, .y)), 
+    SSD = map2_dbl(team_TRUE, team_FALSE, ~rmse(.x, .y)),
+    .groups = "drop"
+  ) %>% 
+  select(outcome, season, cor, SSD) %>% 
+  kable_standard(
+    col.names = c("Outcome", "Season", "Correlation", "Root Sum Sq. Diff."),
+    digits = 4
+  )
+
+```
+
+Correlation shows that the values are almost identical. In addition, the root square difference between the log lambda in the teams and no teams model is very small. 
+
+```{r}
+plot_data <- 
+  raw_results %>% 
+  pivot_wider(names_from = team, 
+              names_prefix = "team_", 
+              values_from = gs_summary) %>% 
+  # slice_head(n = 1) %>% 
+  unnest(where(is.list), names_sep = "_")
+
+plot_data %>% 
+  ggplot(aes(team_TRUE_mean, team_FALSE_mean)) + 
+  geom_abline() + 
+  geom_hex(bins = 50) +
+  facet_wrap(~outcome, labeller = "label_both") + 
+  scale_fill_viridis_c(option = "d") +
+  coord_fixed() +
+  labs(
+    x = "mean log_lambda, teams = TRUE",
+    y = "mean log_lambda, teams = FALSE"
+  )
+
+```
+
+This figure confirms that the teams and no teams models both provide very similar log lambda values. 
