@@ -37,8 +37,8 @@ bayesplot::color_scheme_set("red")
 
 if (!exists("params")) {
   params <- list(
-    model_fname = "model/ppool_combined.RData",
-    data_fname = "data/model-data_s'18'19'20'21_combined_2022-03-10.rds"
+    model_fname = "model/shots/output/ppool_sh-go_s'21_2022-05-18.rds",
+    data_fname = "data/sog-model-data_o-sh-go_s'21_2022-04-25.rds"
   )
 }
 
@@ -70,6 +70,37 @@ ng = ncol(model_data) - 2*np - 64 #Number of total players
 ng_player_names <- names[64+1:np] #Non-goalie player names 
 player_names <-  names[64+np+1:(np+ng)]
 model <- pull_modname(params[["model_fname"]])
+```
+
+
+```{r}
+## Pull in roster -------------------------------------------------------------#
+
+season_str <- pull_seasons(params$model_fname)
+
+model_season <- switch(
+  season_str,
+  "s'21" = 2021,
+  "s'20" = 2020,
+  "s'19" = 2019,
+  "s'18" = 2018,
+)
+
+roster <- 
+  here("data/roster-data_s'18'19'20'21_2022-07-30.rds") %>% 
+  readRDS() %>%
+  filter(season_short == model_season) %>% 
+  select(player_match, position) %>% 
+  mutate(position = case_when(
+    str_detect(position, "D") ~ "D",
+    str_detect(position, "C") ~ "C",
+    str_detect(position, "LW") ~ "W",
+    str_detect(position, "RW") ~ "W",
+    position == "F" ~ "W",
+    TRUE ~ position
+  )) %>% 
+  distinct()
+
 ```
 
 
@@ -142,7 +173,7 @@ plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names, top = -
 # Combining player and team effects
 
 
-season=2021
+season <- model_season
 team_names[which(team_names == "VGK")] = "VEG"
 
 ## Offensive
@@ -181,6 +212,46 @@ plot_post_parameter(ppt_draws_def, pars=vars(everything()), names = colnames(ppt
 
 ```
 
+
+### Players by position 
+
+```{r}
+
+###### Offensive Effects ##########
+# All players.  Note the updated aesthetic allows this to be readable, even if
+# we can't pull out individual players
+plot_post_parameter(pm_fit, vars(starts_with("beta_off")), ng_player_names, 
+                    roster_position = roster) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Offensive Player Effects")
+
+
+######### Defensive Effects ################
+# All players.  Note the updated aesthetic allows this to be readable, even if
+# we can't pull out individual players
+plot_post_parameter(pm_fit, vars(starts_with("beta_def")), player_names, 
+                    roster_position = roster) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Defensive Player Effects")
+
+
+
+
+```
+
+
+```{r}
+
+set.seed(8)
+plot_density_by_position(pm_fit, vars(starts_with("beta_off")), ng_player_names, 
+                         roster, n_samp = 20000) + 
+  labs(title = "Density of Offensive Player Effects by Position")
+
+plot_density_by_position(pm_fit, vars(starts_with("beta_def")), player_names, 
+                         roster, n_samp = 20000) +
+  labs(title = "Density of Defensive Player Effects")
+
+```
 
 
 ```{r}

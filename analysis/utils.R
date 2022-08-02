@@ -38,18 +38,23 @@ pull_outcome <- function(fname) {
 
 # Combine player effect and team effect samples with matrix multiplication.
 #
-# I use the get_rosters function from the HockeyR package to obtain players' team memberships.
-# The function get_player_stats_hr from the HockeyR package would be an alternative to getting players' team memberships, but I've found that it's buggy. 
-# Note that if a player is traded during the season, they appear on both teams' rosters for that season 
-# so there will be players (e.g. Gustav Nyquist in 2019) who get multiple columns ("Gustav.Nyquist:SJS" and "Gustav.Nyquist:DET") 
-# in the output
-##-----------------------------------------------------------------------------#
-#' @param pm_fit An object containing player and team effect MCMC draws, either the Stan model fit or a data frame 
-#' @param season An integer giving the season in which want to check players' team memberships.
-#' @param team_names Vector of team abbreviations (Note that Vegas should be "VEG" instead of "VGK" for it to work with get_rosters function)
-#' @param player_names Vector of player names 
+# I use the get_rosters function from the HockeyR package to obtain players'
+# team memberships. The function get_player_stats_hr from the HockeyR package
+# would be an alternative to getting players' team memberships, but I've found
+# that it's buggy. Note that if a player is traded during the season, they
+# appear on both teams' rosters for that season so there will be players (e.g.
+# Gustav Nyquist in 2019) who get multiple columns ("Gustav.Nyquist:SJS" and
+# "Gustav.Nyquist:DET") in the output
+#' @param pm_fit An object containing player and team effect MCMC draws, either
+#'   the Stan model fit or a data frame
+#' @param season An integer giving the season in which want to check players'
+#'   team memberships.
+#' @param team_names Vector of team abbreviations (Note that Vegas should be
+#'   "VEG" instead of "VGK" for it to work with get_rosters function)
+#' @param player_names Vector of player names
 #'   
-#' @return A matrix with a column of posterior samples for each player-team combination
+#' @return A matrix with a column of posterior samples for each player-team
+#'   combination
 get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
   
   #Obtain data frame of posterior samples 
@@ -70,9 +75,15 @@ get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
   t = 1 #Counter for iteration through teams
   p = 1 #Counter for iteration through players
   
+  
+  roster <- here("data/roster-data_s'18'19'20'21_2022-07-30.rds") %>% 
+    readRDS() %>% 
+    select(-season) %>% 
+    filter(season_short == season)
+  
   for (team in team_names) {
-    team_players = hockeyR::get_rosters(team, season)$player
-    ms = match(gsub(" ", ".", team_players), player_names)
+    team_players <- roster %>% filter(team_abbr == team) %>% pull(player_match)
+    ms <- match(team_players, player_names)
     
     for (m in ms[!is.na(ms)]) {
       X[c(t, nt+m) , p] = 1
@@ -103,7 +114,7 @@ get_ppt_draws <- function(pm_fit, season, team_names, player_names) {
 #'   `prob` and `prob_outer` from the defaults of `0.5` and `0.9`, respectively.
 #'   
 #' @return A ggplot object. 
-plot_post_parameter <- function(fit, pars, names, ..., top = NULL) {
+plot_post_parameter <- function(fit, pars, names, ..., top = NULL, roster_position = NULL) {
   
   plot_data <- bayesplot::mcmc_intervals_data(fit, pars = pars, ...)
   plot_data$name <- names
@@ -112,6 +123,12 @@ plot_post_parameter <- function(fit, pars, names, ..., top = NULL) {
     rlang::warn("`names` should be the same length as parameters selected.")
   }
   
+  if (!is.null(roster_position)) {
+    plot_data <- plot_data %>% 
+      left_join(roster_position, by = c("name" = "player_match")) %>% 
+      filter(!is.na(position))
+  }
+
   if (!is.null(top)) {
     if (top > 0) {
       plot_data <- slice_max(plot_data, order_by = m, n = top)  
@@ -119,10 +136,10 @@ plot_post_parameter <- function(fit, pars, names, ..., top = NULL) {
       plot_data <- slice_min(plot_data, order_by = m, n = abs(top))
     }
   }
-  order <-  dplyr::arrange(plot_data, m)
+  plot_data$name <- fct_reorder(plot_data$name, plot_data$m)
   
-  ggplot2::ggplot(plot_data,
-                  ggplot2::aes(y = parameter, yend = parameter)) +
+  p <- ggplot2::ggplot(plot_data,
+                  ggplot2::aes(y = name, yend = name)) +
     # Plot the interval as three separate geoms: segment, segment, and errorbar
     ggplot2::geom_segment(
       ggplot2::aes(x = ll, xend = hh),
@@ -137,10 +154,62 @@ plot_post_parameter <- function(fit, pars, names, ..., top = NULL) {
       width = 1, color = "white"
     ) +
     ggplot2::geom_vline(xintercept = 0, color = "grey80") + 
-    ggplot2::scale_y_discrete(labels = order$name, limits = order$parameter) +
     ggplot2::theme_minimal() +
     ggplot2::theme(panel.grid = element_blank()) + 
     ggplot2::labs(x = "Estimate", y = NULL)
+  
+  if (!is.null(roster_position)) {
+    p <- p + 
+      facet_grid(rows = vars(position), 
+                 labeller = "label_both",
+                 scales = "free",
+                 space = "free")
+  }
+  
+  return(p)
+}
+
+
+#' Plot Coefficients Density by Position
+#'
+#' For each position, randomly select a player, then randomly select a
+#' coefficient from them from a chain/iteration. Returns a plot of the 
+#' 
+#' @inheritParams plot_post_parameter
+#' @param roster The roster for the season indicating players and positions
+#' @param n_samp The number of samples to use for each position
+#' @return A ggplot object. 
+plot_density_by_position <- function(fit, vars, names, roster, n_samp = 10000) {
+  
+  draws <- posterior::as_draws_df(fit) %>% 
+    select(!!!vars) %>% 
+    suppressWarnings()
+  
+  plot_data <- tibble()
+  for (pos in c("W", "D", "C", "G")) {
+    pos_players <- roster %>% filter(position == pos) %>% pull(player_match)
+    pos_players <- intersect(pos_players, names)
+    
+    if (length(pos_players) > 0) {
+      rs <- tibble(
+        position = pos, 
+        player = sample(pos_players, size = n_samp, replace = TRUE),
+        row = sample(1:4000, size = n_samp, replace = TRUE)
+      ) %>% 
+        mutate(
+          col = match(player, names),
+          val = map2_dbl(row, col, ~draws[[.x, .y]])
+        )
+      
+      plot_data <- bind_rows(plot_data, rs)
+    }
+  }
+  
+  ggplot2::ggplot(plot_data, 
+                  ggplot2::aes(val, color = position)) +
+    ggplot2::geom_density() +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(x = "Estimate", y = "Density")
 }
 
 #' Plot Rhat for multiple parameters
